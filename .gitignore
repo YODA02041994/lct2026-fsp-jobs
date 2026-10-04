@@ -1,0 +1,29 @@
+# --- материалы организатора и ТЗ: вне git (ТЗ содержит сведения, которые нельзя передавать третьим лицам)
+docs/materials/
+*.pdf
+*.docx
+*.pptx
+*.xlsx
+*.zip
+# --- секреты и локальные настройки
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+# --- данные: выгрузки вакансий и любые персональные данные
+data/
+*.sqlite
+*.sqlite3
+*.db
+# --- служебное
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+.DS_Store
+._*
+.pytest_cache/
+dist/
+build/
