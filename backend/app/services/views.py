@@ -44,6 +44,7 @@ def session_view(s: TestSession, reveal: bool = False) -> dict:
     for it in s.items:
         items.append({"id": it.id, "block_no": it.block_no, "order_no": it.order_no, "level": it.level,
                       "payload": it.payload, "answered": it.candidate_answer is not None,
+                      "seconds_left": None if it.candidate_answer is not None else get_settings().test_item_seconds,
                       **({"correct": it.correct, "explanation": it.answer_key.get("explanation", "")} if reveal and s.status == "finished" else {})})
     result = None
     if s.status == "finished":

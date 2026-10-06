@@ -159,7 +159,7 @@ def my_vacancies(e: Employer = Depends(current_employer), db: Session = Depends(
     out = []
     for v in rows:
         d = _vac_view(v, db, True)
-        d["applications_count"] = db.scalar(select(Application.id).where(Application.vacancy_id == v.id).limit(1)) and len(db.scalars(select(Application).where(Application.vacancy_id == v.id)).all()) or 0
+        d["applications_count"] = len(db.scalars(select(Application.id).where(Application.vacancy_id == v.id)).all())
         out.append(d)
     return out
 

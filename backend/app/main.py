@@ -35,8 +35,5 @@ def health():
 
 front = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", settings.frontend_dir))
 if os.path.isdir(front):
-    app.mount("/static", StaticFiles(directory=front), name="static")
-
-    @app.get("/", include_in_schema=False)
-    def index():
-        return FileResponse(os.path.join(front, "index.html"))
+    # фронтенд — статика с корня; маршруты /api объявлены выше и имеют приоритет
+    app.mount("/", StaticFiles(directory=front, html=True), name="frontend")

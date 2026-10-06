@@ -117,7 +117,8 @@ export const CandidateTest = {
     const currentItems = computed(() => (session.value ? session.value.items.filter((i) => i.block_no === session.value.current_block) : []));
     const pending = computed(() => currentItems.value.filter((i) => !i.answered));
     const current = computed(() => pending.value[0] || null);
-    const itemIndex = computed(() => (session.value ? session.value.block_size - pending.value.length + 1 : 0));
+    const itemIndex = computed(() => (session.value ? (session.value.current_block - 1) * session.value.block_size + (session.value.block_size - pending.value.length + 1) : 0));
+    const itemsTotal = computed(() => (session.value ? session.value.block_size * session.value.blocks_total : 0));
     const progress = computed(() => {
       if (!session.value) return 0;
       const total = session.value.block_size * session.value.blocks_total;
@@ -174,7 +175,7 @@ export const CandidateTest = {
     }
     async function submit(timeout = false) {
       if (!current.value || busy.value) return;
-      busy.value = true; timer.stop();
+      busy.value = true; timer.stop(); interlude.value = null;
       const item = current.value;
       try {
         const r = await api.post(`/tests/sessions/${session.value.id}/answer`, { item_id: item.id, answer: answerReady() ? answer.value : null });
@@ -183,7 +184,7 @@ export const CandidateTest = {
           const next = await api.post(`/tests/sessions/${session.value.id}/next`);
           if (next.status === 'finished') { session.value = next; step.value = 5; await refreshMe(); }
           else {
-            interlude.value = `Блок ${session.value.current_block} из ${next.blocks_total} завершён. Следующий блок — задания уровня ${gradeTitle(next.current_level)}.`;
+            interlude.value = `Блок ${session.value.current_block} из ${next.blocks_total} завершён. Начался блок ${next.current_block}: задания уровня ${gradeTitle(next.current_level)}.`;
             session.value = next;
           }
         }
@@ -196,7 +197,7 @@ export const CandidateTest = {
     function retake(grade) { session.value = null; interlude.value = null; form.claimed_grade = grade || form.claimed_grade; step.value = 2; navigate('/candidate/test'); }
     function reset() { session.value = null; interlude.value = null; step.value = 1; }
 
-    return { step, options, loading, error, form, session, answer, busy, interlude, me, current, pending, itemIndex, progress, timer, specOptions, gradeOptions, selectedSpec, skillGroups, activeSession, canChange,
+    return { step, options, loading, error, form, session, answer, busy, interlude, me, current, pending, itemIndex, itemsTotal, progress, timer, specOptions, gradeOptions, selectedSpec, skillGroups, activeSession, canChange,
       toggleSkill, start, resume, submit, answerReady, retake, reset, load, gradeTitle, specName, skillName, fmtDate, futureOrPast, store };
   },
   template: `
@@ -255,15 +256,11 @@ export const CandidateTest = {
 
       <!-- 4. тест -->
       <div v-else-if="step === 4 && session">
-        <div v-if="interlude" class="card" style="text-align:center;padding:36px">
-          <h2>{{ interlude }}</h2>
-          <p class="muted">Переходите, когда будете готовы — таймер запустится с первым заданием блока.</p>
-          <button type="button" class="btn btn-primary btn-lg" @click="interlude = null">Продолжить</button>
-        </div>
-        <template v-else-if="current">
+        <div v-if="interlude" class="note note-pink row-between"><span><strong>{{ interlude }}</strong> Время на задание уже идёт.</span><button type="button" class="btn btn-ghost btn-sm" @click="interlude = null">Понятно</button></div>
+        <template v-if="current">
           <div class="card">
             <div class="row-between" style="margin-bottom:10px">
-              <div><strong>Задание {{ itemIndex }} из {{ session.block_size }}</strong> <span class="muted">· блок {{ session.current_block }} из {{ session.blocks_total }} · уровень {{ gradeTitle(current.level) }}</span></div>
+              <div><strong>Задание {{ itemIndex }} из {{ itemsTotal }}</strong> <span class="muted">· блок {{ session.current_block }} из {{ session.blocks_total }} · уровень {{ gradeTitle(current.level) }}</span></div>
               <div class="timer" :class="{ low: timer.left.value <= 15 }" title="Время на задание">⏱ {{ timer.text.value }}</div>
             </div>
             <div class="progress" style="margin-bottom:16px"><span :style="{ width: progress + '%' }"></span></div>

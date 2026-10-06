@@ -92,7 +92,7 @@ def _own_session(sid: int, c: Candidate, db: Session) -> TestSession:
 def history(c: Candidate = Depends(current_candidate), db: Session = Depends(get_db)):
     rows = db.scalars(select(TestSession).where(TestSession.candidate_id == c.id).order_by(TestSession.id.desc())).all()
     return [{"id": s.id, "status": s.status, "specialization_code": s.specialization_code, "claimed_grade": s.claimed_grade,
-             "result_grade": s.result_grade, "decision": s.decision, "theta": s.theta, "started_at": s.started_at,
+             "result_grade": s.result_grade, "decision": s.decision, "theta": s.theta, "theta_sd": s.theta_sd, "started_at": s.started_at,
              "finished_at": s.finished_at, "items_total": len(s.items), "correct_total": sum(1 for it in s.items if it.correct)} for s in rows]
 
 

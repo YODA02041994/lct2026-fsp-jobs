@@ -88,7 +88,12 @@ def _salary(spec: str, grade: str, rng: random.Random) -> tuple[int, int]:
     return lo, int(lo * rng.uniform(1.2, 1.45) / 1000) * 1000
 
 
-def make_candidates(n: int, rng: random.Random, events: list[dict]) -> list[SynthCandidate]:
+def make_candidates(n: int, rng: random.Random, events: list[dict], honesty: str = "typical") -> list[SynthCandidate]:
+    """honesty: 'honest' — резюме почти правдивы; 'typical' — часть технологий приписана, грейд нередко завышен;
+    'inflated' — сильное приукрашивание (рынок, где резюме не проверяют)."""
+    H = {"honest": dict(keep=0.9, extra_p=0.15, extra_n=(1, 1), over=0.08, under=0.05),
+         "typical": dict(keep=0.8, extra_p=0.55, extra_n=(1, 3), over=0.25, under=0.05),
+         "inflated": dict(keep=0.75, extra_p=0.8, extra_n=(2, 4), over=0.4, under=0.03)}[honesty]
     out = []
     used = set()
     for i in range(n):
@@ -98,17 +103,19 @@ def make_candidates(n: int, rng: random.Random, events: list[dict]) -> list[Synt
         pool = SPEC_STACK[spec]
         k = {"junior": (3, 5), "middle": (5, 8), "senior": (7, 10), "lead": (7, 11)}[grade]
         true_stack = rng.sample(pool, min(len(pool), rng.randint(*k)))
-        declared = [s for s in true_stack if rng.random() < 0.8]
-        if rng.random() < 0.35:                                 # приписанная технология
-            extra = rng.choice([s for s in pool if s not in declared] or pool)
-            declared.append(extra)
+        declared = [s for s in true_stack if rng.random() < H["keep"]]
+        if rng.random() < H["extra_p"]:                          # приписанные технологии
+            others = [s for s in pool if s not in true_stack] or pool
+            for extra in rng.sample(others, min(len(others), rng.randint(*H["extra_n"]))):
+                if extra not in declared:
+                    declared.append(extra)
         gi = GRADES.index(grade)
-        claimed = GRADES[min(gi + 1, 3)] if rng.random() < 0.22 else GRADES[max(gi - 1, 0)] if rng.random() < 0.06 else grade
-        first = rng.choice(FIRST)
-        female = first in FEMALE
-        while True:
+        claimed = GRADES[min(gi + 1, 3)] if rng.random() < H["over"] else GRADES[max(gi - 1, 0)] if rng.random() < H["under"] else grade
+        for attempt in range(1000):
+            first = rng.choice(FIRST)
+            female = first in FEMALE
             last = rng.choice(LAST_M) + ("а" if female else "")
-            name = f"{first} {last}"
+            name = f"{first} {last}" + (f" {attempt}" if attempt > 600 else "")
             if name not in used:
                 used.add(name)
                 break

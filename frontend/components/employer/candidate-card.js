@@ -90,8 +90,7 @@ export const CandidateCard = {
           <div class="score-lbl">{{ scoreLabel }}</div>
         </div>
         <ScoreParts v-if="!noScore && card.parts" :parts="card.parts" :weights="weights" compact style="margin:10px 0" />
-        <button v-if="!noInvite && !card.contacts_unlocked" type="button" class="btn btn-primary btn-block" @click="inviting = true">Пригласить</button>
-        <button v-else-if="!noInvite" type="button" class="btn btn-outline btn-block" @click="inviting = true">Пригласить ещё раз</button>
+        <button v-if="!noInvite" type="button" class="btn btn-primary btn-block" @click="inviting = true">Пригласить</button>
       </div>
       <InviteModal v-if="inviting" :card="card" :version-id="versionId" @close="inviting = false" @sent="onSent" />
     </div>`,

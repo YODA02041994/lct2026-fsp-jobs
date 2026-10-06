@@ -48,10 +48,13 @@ def update(data: EmployerUpdate, e: Employer = Depends(current_employer), db: Se
     return employer_view(e)
 
 
-def _need_view(n: Need) -> dict:
+def _need_view(n: Need, db: Session | None = None) -> dict:
+    sel_id = None
+    if db is not None:
+        sel_id = db.scalar(select(Selection.id).where(Selection.need_id == n.id).order_by(Selection.id.desc()).limit(1))
     return {"id": n.id, "title": n.title, "text": n.text, "specialization_code": n.specialization_code, "grade": n.grade,
             "stack": n.stack, "salary_min": n.salary_min, "salary_max": n.salary_max, "work_format": n.work_format,
-            "city": n.city, "created_at": n.created_at}
+            "city": n.city, "created_at": n.created_at, "selection_id": sel_id}
 
 
 @router.post("/needs", status_code=201)
@@ -71,12 +74,12 @@ def create_need(data: NeedIn, e: Employer = Depends(current_employer), db: Sessi
     db.add(n)
     db.commit()
     db.refresh(n)
-    return {"need": _need_view(n), "extracted": ext}
+    return {"need": _need_view(n, db), "extracted": ext}
 
 
 @router.get("/needs")
 def list_needs(e: Employer = Depends(current_employer), db: Session = Depends(get_db)):
-    return [_need_view(n) for n in db.scalars(select(Need).where(Need.employer_id == e.id).order_by(Need.id.desc())).all()]
+    return [_need_view(n, db) for n in db.scalars(select(Need).where(Need.employer_id == e.id).order_by(Need.id.desc())).all()]
 
 
 def _selection_view(db: Session, sel: Selection, employer_id: int) -> dict:

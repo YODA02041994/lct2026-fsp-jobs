@@ -19,4 +19,9 @@ def catalog():
                  "grade_change_cooldown_days": s.grade_change_cooldown_days},
         "demo_mode": s.demo_mode,
         "email_demo": s.email_demo,
+        "demo_accounts": [
+            {"email": "candidate.demo@fsp-demo.ru", "password": "demo12345", "role": "candidate", "note": "кандидат с историей ФСП"},
+            {"email": "candidate2.demo@fsp-demo.ru", "password": "demo12345", "role": "candidate", "note": "кандидат без истории ФСП"},
+            {"email": "employer.demo@fsp-demo.ru", "password": "demo12345", "role": "employer", "note": "работодатель с вакансиями и подборками"},
+        ] if s.demo_mode else [],
     }

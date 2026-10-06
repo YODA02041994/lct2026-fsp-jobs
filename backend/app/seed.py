@@ -53,7 +53,7 @@ def _user(db, email: str, role: str) -> User:
     return u
 
 
-def seed_demo(n_candidates: int = 120, rng_seed: int = 7) -> dict:
+def seed_demo(n_candidates: int = 120, rng_seed: int = 7, honesty: str = "typical") -> dict:
     rng = random.Random(rng_seed)
     events = synth.load_events()
     stats = {"candidates": 0, "employers": 0, "vacancies": 0, "events": 0, "achievements": 0}
@@ -70,7 +70,7 @@ def seed_demo(n_candidates: int = 120, rng_seed: int = 7) -> dict:
         db.flush()
         stats["events"] = len(events)
         # кандидаты
-        cands = synth.make_candidates(n_candidates, rng, events)
+        cands = synth.make_candidates(n_candidates, rng, events, honesty=honesty)
         now = datetime.now(timezone.utc)
         for sc in cands:
             u = _user(db, f"cand{sc.idx + 1}@fsp-demo.ru", "candidate")
@@ -105,7 +105,7 @@ def seed_demo(n_candidates: int = 120, rng_seed: int = 7) -> dict:
             # навыки: заявленные; подтверждены тестом те, что есть в истинном стеке (с вероятностью) и были проверены
             for sk in sc.declared_stack:
                 truly = sk in sc.true_stack
-                tested = rng.random() < 0.7
+                tested = rng.random() < 0.85           # блоки теста покрывают заявленные технологии (docs/08)
                 score = round(rng.uniform(0.6, 1.0), 2) if truly and tested else round(rng.uniform(0.0, 0.45), 2) if tested else None
                 db.add(CandidateSkill(candidate_id=c.id, skill=sk, source="profile", confirmed_by_test=bool(score is not None and score >= 0.5), test_score=score))
             # ФСП

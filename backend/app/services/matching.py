@@ -32,18 +32,20 @@ def _aware(dt):
 def stack_part(need_stack: list[str], cand_skills) -> tuple[float, dict]:
     if not need_stack:
         return 0.0, {"confirmed": [], "declared": [], "missing": []}
-    conf, decl, miss = [], [], []
+    conf, decl, failed, miss = [], [], [], []
     by = {k.skill: k for k in cand_skills}
     for s in need_stack:
         k = by.get(s)
         if k and k.confirmed_by_test:
             conf.append(s)
+        elif k and k.test_score is not None:
+            failed.append(s)                 # заявлена, проверена тестом, не подтверждена
         elif k:
-            decl.append(s)
+            decl.append(s)                   # заявлена, тестом не проверялась
         else:
             miss.append(s)
-    val = (len(conf) * 1.0 + len(decl) * 0.3) / len(need_stack)
-    return min(val, 1.0), {"confirmed": conf, "declared": decl, "missing": miss}
+    val = (len(conf) * 1.0 + len(decl) * 0.4 + len(failed) * 0.1) / len(need_stack)
+    return min(val, 1.0), {"confirmed": conf, "declared": decl, "failed": failed, "missing": miss}
 
 
 def grade_part(need_grade: str | None, cand_grade: str | None) -> float:
@@ -111,7 +113,8 @@ def score_candidate(c: Candidate, need: dict, weights: dict, last_theta: tuple |
     bits = []
     ns = need.get("stack") or []
     if ns:
-        bits.append(f"технологии: подтверждено тестом {len(stack_d['confirmed'])}, заявлено {len(stack_d['declared'])} из {len(ns)}"
+        bits.append(f"технологии: подтверждено тестом {len(stack_d['confirmed'])}, заявлено без проверки {len(stack_d['declared'])}"
+                    + (f", не подтверждено тестом {len(stack_d['failed'])}" if stack_d["failed"] else "") + f" из {len(ns)}"
                     + (f" (нет: {', '.join(skill_name(x) for x in stack_d['missing'][:3])})" if stack_d["missing"] else ""))
     if c.grade:
         bits.append(f"грейд {GRADE_TITLE.get(c.grade, c.grade)} подтверждён тестом" + (f" ({str_text})" if theta is not None else ""))
