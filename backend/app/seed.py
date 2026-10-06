@@ -140,6 +140,7 @@ def seed_demo(n_candidates: int = 120, rng_seed: int = 7, honesty: str = "typica
         for email, sc in (("candidate.demo@fsp-demo.ru", with_fsp), ("candidate2.demo@fsp-demo.ru", without)):
             cand = db.scalar(select(Candidate).join(User).where(User.email == f"cand{sc.idx + 1}@fsp-demo.ru"))
             cand.user.email = email
+            cand.grade_changed_at = now - timedelta(days=120)      # жюри сможет сразу пройти тест заново
         # работодатели, потребности, вакансии, короткие задания
         emp_by_name = {}
         for i, (name, desc, industry, city) in enumerate(synth.COMPANIES):

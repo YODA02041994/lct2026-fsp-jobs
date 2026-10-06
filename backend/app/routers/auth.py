@@ -1,6 +1,6 @@
 """Регистрация с подтверждением почты, вход, текущий пользователь."""
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from ..config import get_settings
@@ -15,13 +15,17 @@ from ..services.audit import log
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-def _confirm_url(token: str) -> str:
+def _confirm_url(token: str, request: Request | None = None) -> str:
+    """Ссылка подтверждения: на стенде — публичный адрес из настроек; локально — адрес, с которого пришёл запрос."""
     s = get_settings()
-    return f"{s.public_url.rstrip('/')}{s.root_path}/#/confirm?token={token}"
+    base = s.public_url.rstrip("/")
+    if request is not None and base == "http://localhost:8000":
+        base = f"{request.url.scheme}://{request.url.netloc}"
+    return f"{base}{s.root_path}/#/confirm?token={token}"
 
 
 @router.post("/register", status_code=201, responses={409: {"description": "Почта уже зарегистрирована"}})
-def register(data: RegisterIn, db: Session = Depends(get_db)):
+def register(data: RegisterIn, request: Request, db: Session = Depends(get_db)):
     email = data.email.lower()
     if db.scalar(select(User).where(User.email == email)):
         raise HTTPException(status.HTTP_409_CONFLICT, "Эта почта уже зарегистрирована")
@@ -37,7 +41,7 @@ def register(data: RegisterIn, db: Session = Depends(get_db)):
                       expires_at=datetime.now(timezone.utc) + timedelta(days=2)))
     log(db, user.id, "register", "user", user.id, role=data.role)
     db.commit()
-    url = _confirm_url(token)
+    url = _confirm_url(token, request)
     sent = send_email(email, "Подтверждение почты — Карьера ФСП",
                       f"Здравствуйте! Чтобы подтвердить адрес и войти, перейдите по ссылке:\n{url}\n\nЕсли вы не регистрировались, просто не отвечайте на письмо.")
     out = {"user_id": user.id, "email": email, "role": data.role, "confirm_required": True}

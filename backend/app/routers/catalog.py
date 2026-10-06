@@ -4,6 +4,9 @@ from ..config import get_settings
 from ..services.skills_catalog import SKILLS
 
 router = APIRouter(tags=["catalog"])
+GROUP_TITLES = {"lang": "Языки", "data": "Данные", "db": "Базы данных", "infra": "Инфраструктура", "tools": "Инструменты", "cloud": "Облака",
+                "web": "Веб и протоколы", "framework": "Фреймворки", "ml": "Машинное обучение", "analytics": "Аналитика", "qa": "Тестирование",
+                "mobile": "Мобильная разработка", "security": "Безопасность", "cs": "Основы", "process": "Процессы"}
 
 
 @router.get("/catalog")
@@ -13,7 +16,7 @@ def catalog():
         "specializations": [{"code": c, "name": n, "description": d, "has_bank": hb} for c, n, d, hb, _ in SPECIALIZATIONS],
         "grades": [{"code": c, "title": t, "description": d} for c, t, d in GRADES],
         "work_formats": [{"code": c, "title": t} for c, t in WORK_FORMATS],
-        "skills": [{"code": c, "name": n, "group": g} for c, n, _, g in SKILLS],
+        "skills": [{"code": c, "name": n, "group": GROUP_TITLES.get(g, g), "group_code": g} for c, n, _, g in SKILLS],
         "weights": DEFAULT_WEIGHTS,
         "test": {"block_size": s.test_block_size, "blocks": s.test_blocks, "item_seconds": s.test_item_seconds,
                  "grade_change_cooldown_days": s.grade_change_cooldown_days},

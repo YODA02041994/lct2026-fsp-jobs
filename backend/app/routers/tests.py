@@ -56,7 +56,7 @@ def start(data: SessionStart, c: Candidate = Depends(current_candidate), db: Ses
     if active:
         return session_view(active)
     if c.grade and not _cooldown_ok(c):
-        raise HTTPException(status.HTTP_409_CONFLICT, f"Сменить грейд можно не раньше {grade_change_available_at(c).date().isoformat()}")
+        raise HTTPException(status.HTTP_409_CONFLICT, f"Сменить грейд можно не раньше {grade_change_available_at(c).strftime('%d.%m.%Y')}")
     settings = get_settings()
     load_all()
     skills = []
