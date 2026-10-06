@@ -27,3 +27,7 @@ node_modules/
 .pytest_cache/
 dist/
 build/
+
+# данные справочника календаря — в git
+!backend/app/data/
+!backend/app/data/*.json

@@ -4,7 +4,24 @@ import enum
 from datetime import datetime, timezone
 from sqlalchemy import String, Integer, Float, Boolean, DateTime, ForeignKey, Text, JSON, UniqueConstraint, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
 from .db import Base
+
+
+class TZDateTime(TypeDecorator):
+    """Дата-время всегда с часовым поясом UTC: SQLite возвращает наивные значения, Postgres — со смещением."""
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is not None and value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is not None and value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value
 
 
 def now() -> datetime:
@@ -32,7 +49,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(20))
     email_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, default=now)
     candidate: Mapped["Candidate | None"] = relationship(back_populates="user", uselist=False)
     employer: Mapped["Employer | None"] = relationship(back_populates="user", uselist=False)
 
@@ -43,7 +60,7 @@ class EmailToken(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("user.id", ondelete="CASCADE"), index=True)
     token: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     purpose: Mapped[str] = mapped_column(String(20))      # confirm / reset
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(TZDateTime)
     used: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
@@ -75,14 +92,14 @@ class Candidate(Base):
     specialization_code: Mapped[str | None] = mapped_column(ForeignKey("specialization.code"), nullable=True)
     claimed_grade: Mapped[str | None] = mapped_column(String(20), nullable=True)   # что заявил в опросе
     grade: Mapped[str | None] = mapped_column(String(20), nullable=True)           # подтверждённый тестом
-    grade_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    grade_changed_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
     fsp_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
-    fsp_linked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    fsp_linked_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
     visible_to_employers: Mapped[bool] = mapped_column(Boolean, default=False)
     privacy: Mapped[dict] = mapped_column(JSON, default=lambda: {"achievements": True, "city": True, "salary": True, "fsp_link": True})
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
-    last_active_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(TZDateTime, default=now, onupdate=now)
+    last_active_at: Mapped[datetime] = mapped_column(TZDateTime, default=now)
     synthetic: Mapped[bool] = mapped_column(Boolean, default=False)   # демонстрационная запись
     user: Mapped[User] = relationship(back_populates="candidate")
     skills: Mapped[list["CandidateSkill"]] = relationship(back_populates="candidate", cascade="all, delete-orphan")
@@ -108,8 +125,8 @@ class Consent(Base):
     candidate_id: Mapped[int] = mapped_column(ForeignKey("candidate.id", ondelete="CASCADE"), index=True)
     kind: Mapped[str] = mapped_column(String(20))       # processing / publication
     text_version: Mapped[str] = mapped_column(String(20), default="1.0")
-    given_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
-    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    given_at: Mapped[datetime] = mapped_column(TZDateTime, default=now)
+    revoked_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
     candidate: Mapped[Candidate] = relationship(back_populates="consents")
 
 
@@ -144,8 +161,8 @@ class TestSession(Base):
     theta_sd: Mapped[float | None] = mapped_column(Float, nullable=True)
     result_grade: Mapped[str | None] = mapped_column(String(20), nullable=True)
     decision: Mapped[str | None] = mapped_column(String(30), nullable=True)   # confirmed / suggest_lower / suggest_higher / applied
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(TZDateTime, default=now)
+    finished_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
     items: Mapped[list["TestItem"]] = relationship(back_populates="session", cascade="all, delete-orphan", order_by="TestItem.order_no")
 
 
@@ -162,8 +179,8 @@ class TestItem(Base):
     answer_key: Mapped[dict] = mapped_column(JSON)       # правильный ответ — наружу не отдаётся
     candidate_answer: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
-    answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    issued_at: Mapped[datetime] = mapped_column(TZDateTime, default=now)
+    answered_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
     session: Mapped[TestSession] = relationship(back_populates="items")
 
 
@@ -174,7 +191,7 @@ class GradeHistory(Base):
     session_id: Mapped[int | None] = mapped_column(ForeignKey("test_session.id"), nullable=True)
     old_grade: Mapped[str | None] = mapped_column(String(20), nullable=True)
     new_grade: Mapped[str] = mapped_column(String(20))
-    changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    changed_at: Mapped[datetime] = mapped_column(TZDateTime, default=now)
 
 
 class Employer(Base):
@@ -191,7 +208,7 @@ class Employer(Base):
     contact_phone: Mapped[str] = mapped_column(String(40), default="")
     verified: Mapped[bool] = mapped_column(Boolean, default=False)
     synthetic: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, default=now)
     user: Mapped[User] = relationship(back_populates="employer")
 
 
@@ -209,7 +226,7 @@ class Need(Base):
     salary_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
     work_format: Mapped[str] = mapped_column(String(20), default="")
     city: Mapped[str] = mapped_column(String(80), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, default=now)
 
 
 class Selection(Base):
@@ -217,7 +234,7 @@ class Selection(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     employer_id: Mapped[int] = mapped_column(ForeignKey("employer.id", ondelete="CASCADE"), index=True)
     need_id: Mapped[int | None] = mapped_column(ForeignKey("need.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, default=now)
     versions: Mapped[list["SelectionVersion"]] = relationship(back_populates="selection", cascade="all, delete-orphan", order_by="SelectionVersion.version_no")
 
 
@@ -230,7 +247,7 @@ class SelectionVersion(Base):
     weights: Mapped[dict] = mapped_column(JSON, default=dict)
     categories: Mapped[list] = mapped_column(JSON, default=list)
     results: Mapped[list] = mapped_column(JSON, default=list)     # [{candidate_id, score, parts, explanation}]
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, default=now)
     selection: Mapped[Selection] = relationship(back_populates="versions")
 
 
@@ -248,8 +265,8 @@ class Vacancy(Base):
     work_format: Mapped[str] = mapped_column(String(20), default="")
     city: Mapped[str] = mapped_column(String(80), default="")
     status: Mapped[str] = mapped_column(String(20), default="open")   # open / closed
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(TZDateTime, default=now, onupdate=now)
 
 
 class Invitation(Base):
@@ -264,9 +281,9 @@ class Invitation(Base):
     salary_max: Mapped[int] = mapped_column(Integer)
     contact_method: Mapped[str] = mapped_column(String(200))
     status: Mapped[str] = mapped_column(String(20), default="sent")
-    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
-    viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sent_at: Mapped[datetime] = mapped_column(TZDateTime, default=now)
+    viewed_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
+    responded_at: Mapped[datetime | None] = mapped_column(TZDateTime, nullable=True)
 
 
 class Application(Base):
@@ -277,8 +294,8 @@ class Application(Base):
     candidate_id: Mapped[int] = mapped_column(ForeignKey("candidate.id", ondelete="CASCADE"), index=True)
     message: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(20), default="sent")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, default=now)
+    updated_at: Mapped[datetime] = mapped_column(TZDateTime, default=now, onupdate=now)
 
 
 class ShortTask(Base):
@@ -290,7 +307,7 @@ class ShortTask(Base):
     specialization_code: Mapped[str | None] = mapped_column(ForeignKey("specialization.code"), nullable=True)
     technologies: Mapped[list] = mapped_column(JSON, default=list)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, default=now)
 
 
 class ShortTaskAnswer(Base):
@@ -301,7 +318,7 @@ class ShortTaskAnswer(Base):
     candidate_id: Mapped[int] = mapped_column(ForeignKey("candidate.id", ondelete="CASCADE"), index=True)
     answer: Mapped[str] = mapped_column(Text)
     employer_score: Mapped[int | None] = mapped_column(Integer, nullable=True)   # 1–5
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, default=now)
 
 
 class FspEvent(Base):
@@ -356,7 +373,7 @@ class Achievement(Base):
     document_sha256: Mapped[str] = mapped_column(String(64), default="")
     signature: Mapped[str] = mapped_column(String(200), default="")
     hidden: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, default=now)
     candidate: Mapped[Candidate] = relationship(back_populates="achievements")
 
 
@@ -368,7 +385,7 @@ class AuditLog(Base):
     subject_type: Mapped[str] = mapped_column(String(40), default="")
     subject_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     details: Mapped[dict] = mapped_column(JSON, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    created_at: Mapped[datetime] = mapped_column(TZDateTime, default=now)
 
 
 Index("ix_candidate_category", Candidate.specialization_code, Candidate.grade)
