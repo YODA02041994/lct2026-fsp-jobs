@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     llm_model: str = ""
 
     # тест
-    test_block_size: int = 4
+    test_block_size: int = 5
     test_blocks: int = 2
     test_item_seconds: int = 90
     grade_change_cooldown_days: int = 90

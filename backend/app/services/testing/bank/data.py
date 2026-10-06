@@ -1,4 +1,4 @@
-"""Шаблоны: данные и машинное обучение — SQL, Python и statistics, pandas (концептуально), статистика, ML-базa.
+"""Шаблоны: данные и машинное обучение — SQL, Python и statistics, pandas (концептуально), статистика, основы ML.
 
 Ключи exact: SQL — через sqlite3 на показанных таблицах, Python — исполнением фрагмента, остальное — целочисленная
 арифметика. pandas в окружении нет, поэтому pandas-задания либо концептуальные (choice), либо считаются по
@@ -40,7 +40,7 @@ def _sql_sum_filter(rng: random.Random) -> Instance:
         if ans is not None and matched >= 2:
             break
     return Instance(question="Какое число вернёт запрос? Введите число.", answer=str(ans), code=_sql_block(tables, query),
-                    language="sql", explanation=f"Под условие «{where}» попадают {matched} строк; агрегат {agg} считается только по ним.")
+                    language="sql", explanation=f"Строк под условием «{where}»: {matched}; агрегат {agg} считается только по ним.")
 
 
 @template("data_py_statistics", title="Медиана, мода и размах", competency="Python: модуль statistics",
@@ -152,7 +152,7 @@ def _sql_join_distinct(rng: random.Random) -> Instance:
         other = _sql_eval(tables, query.replace(agg, "COUNT(*)" if distinct else "COUNT(DISTINCT o.customer_id)"))[0][0]
         if ans and ans != other:
             break
-    expl = (f"В сегменте {seg} заказы делали {ans} разных клиентов (всего заказов — {other}); DISTINCT схлопывает повторы клиента."
+    expl = (f"Разных клиентов сегмента {seg}, делавших заказы: {ans}; всего их заказов: {other}. DISTINCT схлопывает повторы клиента."
             if distinct else
             f"JOIN даёт строку на каждый заказ клиента из сегмента {seg}: их {ans} (разных клиентов — {other}).")
     return Instance(question="Какое число вернёт запрос? Введите число.", answer=str(ans), code=_sql_block(tables, query),
@@ -392,7 +392,7 @@ def _lead_pipeline(rng: random.Random) -> Instance:
           specializations=SPEC, technologies=["ml", "system_design"], fmt="multichoice", grade_level="lead", difficulty_shift=0.1)
 def _lead_monitoring(rng: random.Random) -> Instance:
     task = rng.choice(["скоринга заявок", "рекомендаций", "прогноза спроса"])
-    months = rng.choice([3, 6, 9])
+    months = rng.choice([6, 9, 12])
     true_pool = [
         "Следить за дрейфом распределений входных признаков и предсказаний относительно обучающей выборки",
         "Регулярно сравнивать качество на свежей размеченной выборке с качеством, зафиксированным при приёмке",

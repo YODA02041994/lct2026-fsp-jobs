@@ -229,7 +229,7 @@ export const TestItemView = {
   props: { payload: Object, modelValue: null, readonly: Boolean },
   emits: ['update:modelValue'],
   computed: {
-    techs() { return (this.payload.technologies || []).map((t) => skillName(t)); },
+    techs() { return (this.payload.technologies || []).map((t) => skillName(t)).filter((n) => n.toLowerCase() !== String(this.payload.competency || '').toLowerCase()); },
     multi: {
       get() { return Array.isArray(this.modelValue) ? this.modelValue : []; },
       set(v) { this.$emit('update:modelValue', v); },

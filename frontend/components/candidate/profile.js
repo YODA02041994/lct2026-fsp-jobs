@@ -69,7 +69,7 @@ export const CandidateProfile = {
     <PageHead title="Профиль" sub="Работодатели видят профиль без имени и контактов — как «Кандидат № …» с категорией, стеком и достижениями. Контакты откроются после того, как вы примете приглашение.">
       <button type="button" class="btn btn-outline" @click="pdf">Скачать PDF-профиль</button>
     </PageHead>
-    <div class="grid" style="grid-template-columns: 1fr 320px; align-items:start">
+    <div class="grid grid-side">
       <div>
         <form class="card" @submit.prevent="save">
           <h2>Основное</h2>

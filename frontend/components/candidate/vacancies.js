@@ -19,7 +19,7 @@ export const CandidateVacancies = {
       <a href="#/candidate/applications" class="btn btn-outline">Мои отклики</a>
     </PageHead>
     <div class="card" style="margin-bottom:14px">
-      <div class="form-grid" style="grid-template-columns: 2fr 1fr 1fr 1fr">
+      <div class="form-grid filters-4">
         <Field label="Поиск"><input v-model="f.q" type="search" placeholder="название, компания, слово из описания" @input="changed"></Field>
         <Field label="Специализация"><select v-model="f.specialization" @change="reload"><option value="">любая</option><option v-for="s in store.catalog.specializations" :key="s.code" :value="s.code">{{ s.name }}</option></select></Field>
         <Field label="Грейд"><select v-model="f.grade" @change="reload"><option value="">любой</option><option v-for="g in store.catalog.grades" :key="g.code" :value="g.code">{{ g.title }}</option></select></Field>
@@ -63,7 +63,7 @@ export const CandidateVacancyPage = {
         <PageHead :title="data.title" :sub="data.company_name">
           <a href="#/candidate/vacancies" class="btn btn-ghost">К списку</a>
         </PageHead>
-        <div class="grid" style="grid-template-columns: 1fr 320px; align-items:start">
+        <div class="grid grid-side">
           <div class="card">
             <div class="chips" style="margin-bottom:12px"><span class="chip">{{ specName(data.specialization_code) }}</span><span class="chip">{{ gradeTitle(data.grade) }}</span><span class="chip chip-muted">{{ formatTitle(data.work_format) }}<template v-if="data.city">, {{ data.city }}</template></span></div>
             <h3>Описание</h3>

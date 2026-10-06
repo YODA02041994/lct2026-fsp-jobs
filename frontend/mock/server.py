@@ -87,6 +87,7 @@ SKILLS = [
     ("system_analysis", "Системный анализ", "analytics"), ("bpmn", "BPMN", "analytics"), ("powerbi", "Power BI", "analytics"),
 ]
 SKILL_NAME = {c: n for c, n, _ in SKILLS}
+SKILL_NAME["algorithms"] = "Алгоритмы"
 SKILL_SYNONYMS = {
     "python": ["python", "питон", "python3"], "fastapi": ["fastapi"], "django": ["django", "drf"], "postgresql": ["postgres", "postgresql"],
     "sql": ["sql"], "redis": ["redis"], "kafka": ["kafka", "кафка"], "docker": ["docker", "докер"], "kubernetes": ["kubernetes", "k8s"],
@@ -195,7 +196,7 @@ def seed() -> None:
     add_achievement(c1, kind="rank", title="Кандидат в мастера спорта", discipline="продуктовое программирование", level_code="A4",
                     date="2025-11-12", valid_until="2028-11-12", trust_level="source",
                     event={"name": "Чемпионат России по спортивному программированию", "ekp_number": "ЕКП 24-1187", "level": "всероссийский"})
-    add_achievement(c1, kind="result", title="2 место, Кубок Татарстана", discipline="продуктовое программирование", level_code="A3", place=2,
+    add_achievement(c1, kind="result", title="Кубок Республики Татарстан", discipline="продуктовое программирование", level_code="A3", place=2,
                     date="2025-05-18", trust_level="source", event={"name": "Кубок Республики Татарстан", "ekp_number": "ЕКП 25-0412", "level": "региональный"})
     add_achievement(c1, kind="result", title="Финалист хакатона «Цифровой прорыв»", discipline="программирование продуктовое", level_code="A2",
                     place=7, date="2024-10-02", trust_level="document")
@@ -244,6 +245,23 @@ def seed() -> None:
                             date="2025-0%d-1%d" % (rnd.randint(1, 9), rnd.randint(0, 9)), trust_level="source",
                             event={"name": "Соревнование ФСП", "ekp_number": "ЕКП 25-%04d" % rnd.randint(100, 999), "level": "региональный"})
     c1["_strength"] = 0.82
+    # завершённый сеанс теста у демо-кандидата (история и «последний тест» в профиле)
+    sess = {"id": nid("session"), "candidate_id": c1["id"], "specialization_code": "backend", "claimed_grade": "middle",
+            "declared_skills": ["python", "sql", "fastapi", "postgresql", "kafka"], "status": "active", "current_block": 1, "current_level": "middle",
+            "_items": [], "result": None, "started_at": iso(days(-20))}
+    DB["sessions"][sess["id"]] = sess
+    new_block(sess, "middle")
+    for i, it in enumerate(sess["_items"]):
+        it["answered"] = True; it["correct"] = i != 2; it["issued_at"] = time.time() - 10**6
+    sess["current_block"] = 2; sess["current_level"] = "senior"
+    new_block(sess, "senior")
+    for i, it in enumerate(sess["_items"][4:]):
+        it["answered"] = True; it["correct"] = i % 2 == 0; it["issued_at"] = time.time() - 10**6
+    saved_skills = [dict(s) for s in c1["skills"]]
+    finish_session(sess, c1)
+    sess["finished_at"] = iso(days(-20))
+    c1["skills"] = saved_skills
+    c1["grade"], c1["grade_changed_at"], c1["grade_change_available_at"] = "middle", iso(days(-20)), iso(days(70))
 
     # --- вакансии работодателя
     v1 = add_vacancy(emp, title="Бэкенд-разработчик (Python)", description="Нужен разработчик на Python и FastAPI: сервисы витрин данных, PostgreSQL, очереди Kafka, Docker. Код-ревью, тесты pytest.",
@@ -462,7 +480,7 @@ def build_selection(need: dict, filters: dict, weights: dict) -> dict:
 def add_version(sel: dict, filters: dict, weights: dict) -> dict:
     need = next(n for n in DB["needs"] if n["id"] == sel["need_id"])
     emp = DB["employers"][sel["employer_id"]]
-    f = {k: v for k, v in filters.items() if v not in (None, "", [])}
+    f = {k: v for k, v in filters.items() if v not in (None, "", [], False)}
     # категории: основная и соседние по грейду, если грейд не задан фильтром
     cards = rank(need, f, weights, emp)
     if need.get("grade") and not f.get("grades"):
@@ -476,10 +494,8 @@ def add_version(sel: dict, filters: dict, weights: dict) -> dict:
 
 
 def refine_selection(sel: dict, filters: dict, weights: dict) -> dict:
-    prev = sel["versions"][-1]["filters"]
-    merged = dict(prev)
-    merged.update(filters)
-    add_version(sel, merged, weights or sel["versions"][-1]["weights"])
+    """Фильтры — полный набор для новой версии (null/пусто = без ограничения)."""
+    add_version(sel, filters, weights or sel["versions"][-1]["weights"])
     return sel
 
 
@@ -551,13 +567,29 @@ def new_block(sess: dict, level: str) -> None:
     for k in range(TEST_CFG["block_size"]):
         payload, key = gen_item(rnd, level, techs, k + (sess["current_block"] - 1) * 2)
         sess["_items"].append({"id": nid("item"), "block_no": sess["current_block"], "order_no": k + 1, "level": level, "payload": payload,
-                               "key": key, "answer": None, "correct": None, "issued_at": time.time(), "answered": False})
+                               "key": key, "answer": None, "correct": None, "issued_at": time.time(), "shown_at": None, "answered": False})
+
+
+def current_item(sess: dict) -> dict | None:
+    """Первое неотвеченное задание текущего блока; таймер стартует, когда оно становится текущим."""
+    for it in sess["_items"]:
+        if it["block_no"] == sess["current_block"] and not it["answered"]:
+            if it.get("shown_at") is None:
+                it["shown_at"] = time.time()
+            return it
+    return None
 
 
 def session_view(sess: dict) -> dict:
     items = []
+    cur = current_item(sess)
     for it in sess["_items"]:
-        left = max(0, TEST_CFG["item_seconds"] - int(time.time() - it["issued_at"])) if not it["answered"] else 0
+        if it["answered"]:
+            left = 0
+        elif cur is not None and it["id"] == cur["id"]:
+            left = max(0, TEST_CFG["item_seconds"] - int(time.time() - it["shown_at"]))
+        else:
+            left = TEST_CFG["item_seconds"]
         items.append({"id": it["id"], "block_no": it["block_no"], "order_no": it["order_no"], "level": it["level"], "payload": it["payload"],
                       "answered": it["answered"], "seconds_left": left})
     return {"id": sess["id"], "status": sess["status"], "specialization_code": sess["specialization_code"], "claimed_grade": sess["claimed_grade"],
@@ -1065,7 +1097,8 @@ def test_answer(ctx: Ctx, m):
         raise ApiError(404, "Задание не найдено")
     if item["answered"]:
         raise ApiError(409, "На это задание уже дан ответ")
-    expired = time.time() - item["issued_at"] > TEST_CFG["item_seconds"] + 5
+    current_item(sess)   # фиксирует момент показа, если ответ пришёл до запроса сеанса
+    expired = time.time() - (item.get("shown_at") or time.time()) > TEST_CFG["item_seconds"] + 5
     item["answer"] = ctx.body.get("answer")
     item["correct"] = (not expired) and check(item["payload"]["format"], item["key"]["answer"], item["answer"])
     item["answered"] = True
@@ -1482,7 +1515,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(data)
+        if self.command != "HEAD":
+            self.wfile.write(data)
 
     def _handle(self, method: str) -> None:
         parts = urlsplit(self.path)
@@ -1546,6 +1580,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(404, {"detail": f"Адрес {api_path} не найден"})
 
     def do_GET(self):
+        self._handle("GET")
+
+    def do_HEAD(self):
         self._handle("GET")
 
     def do_POST(self):

@@ -49,7 +49,7 @@ export const CandidateAchievements = {
     <PageHead title="Достижения ФСП" sub="Профиль достижений виден работодателю и влияет на место в подборке с ограниченным весом. Уровень доверия у каждой записи свой: интерфейс их не смешивает.">
       <button type="button" class="btn btn-outline" @click="adding = true">Добавить запись вручную</button>
     </PageHead>
-    <div class="grid" style="grid-template-columns: 1fr 320px; align-items:start">
+    <div class="grid grid-side">
       <div>
         <div class="legend" style="margin-bottom:10px">
           <span>Уровни доверия:</span>
@@ -75,7 +75,7 @@ export const CandidateAchievements = {
         <h3>ФСП ID</h3>
         <template v-if="me.fsp_id">
           <p style="margin:0 0 4px">Связан: <strong>{{ me.fsp_id }}</strong></p>
-          <p class="muted" style="font-size:13px">с {{ fmtDate(me.fsp_linked_at) }}. Записи из реестра помечаются «подтверждено источником» и обновляются при входе.</p>
+          <p class="muted" style="font-size:13px">с {{ fmtDate(me.fsp_linked_at) }}; записи из реестра помечаются «подтверждено источником» и обновляются при входе.</p>
           <button type="button" class="btn btn-danger btn-sm" :disabled="busy" @click="unlink">Отвязать</button>
         </template>
         <template v-else>

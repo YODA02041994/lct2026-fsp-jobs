@@ -141,7 +141,7 @@ def _sql_count_rows(rng: random.Random) -> Instance:
             break
     return Instance(question="Какое число вернёт запрос? Введите число.", answer=str(ans),
                     code=_sql_block(tables, query), language="sql",
-                    explanation=f"Условию «{where}» удовлетворяют {ans} строк из {n}.")
+                    explanation=f"Условию «{where}» удовлетворяет {ans} из {n} строк.")
 
 
 @template("common_sql_distinct", title="DISTINCT и число различных значений", competency="SQL: DISTINCT",
@@ -156,13 +156,13 @@ def _sql_distinct(rng: random.Random) -> Instance:
             query = "SELECT COUNT(DISTINCT city) FROM orders;"
             ans = _sql_eval(tables, query)[0][0]
             question = "Какое число вернёт запрос? Введите число."
-            expl = f"В таблице {ans} различных значений city, повторы DISTINCT схлопывает."
+            expl = f"Различных значений city в таблице: {ans}; повторы DISTINCT схлопывает."
         else:
             thr = rng.randrange(200, 800, 50)
             query = f"SELECT DISTINCT city FROM orders\nWHERE amount > {thr};"
             ans = len(_sql_eval(tables, query))
             question = "Сколько строк вернёт запрос? Введите число."
-            expl = f"После фильтра amount > {thr} остаются строки, среди них {ans} разных городов."
+            expl = f"После фильтра amount > {thr} остаются строки; разных городов среди них: {ans}."
         if 2 <= ans <= n - 1:
             break
     return Instance(question=question, answer=str(ans), code=_sql_block(tables, query), language="sql",
@@ -574,7 +574,7 @@ def _http_status(rng: random.Random) -> Instance:
     idx = rng.randrange(len(cases))
     text, correct, expl = cases[idx]
     pool = ["200", "201", "204", "301", "400", "401", "403", "404", "409", "422", "500", "503"]
-    wrong = [c for c in pool if c != correct]
+    wrong = [c for c in pool if c != correct and not (correct == "400" and c == "422")]
     options = [correct] + rng.sample(wrong, 5)
     return _choice(rng, f"{text} Какой код ответа уместен?", options, 0, expl)
 
@@ -743,7 +743,7 @@ def _design_cache(rng: random.Random) -> Instance:
           specializations=[], technologies=["mentoring", "git"], fmt="choice", grade_level="lead", difficulty_shift=-0.2)
 def _lead_code_review(rng: random.Random) -> Instance:
     who = rng.choice(["Марата", "Полины", "Глеба", "Инны"])
-    files, lines = rng.choice([(38, 2100), (52, 3400), (27, 1800), (64, 4200)])
+    files, lines = rng.choice([(27, 1800), (38, 2100), (45, 2900), (56, 3400)])
     mod = rng.choice(["billing", "auth", "export", "scheduler"])
     days = rng.randint(2, 4)
     scenarios = [
@@ -800,7 +800,7 @@ def _lead_postmortem(rng: random.Random) -> Instance:
           specializations=[], technologies=["agile", "system_design"], fmt="choice", grade_level="lead", difficulty_shift=0.2)
 def _lead_tech_debt(rng: random.Random) -> Instance:
     pct = rng.choice([30, 40, 50])
-    n = rng.choice([4, 6, 8])
+    n = rng.choice([5, 6, 8])
     team = rng.choice(["платежей", "каталога", "CRM", "личного кабинета"])
     text = (f"Команда {team}: около {pct} % времени спринта уходит на починку старых модулей, бизнес ждёт {n} новых "
             f"функций в квартал и не хочет слышать про «рефакторинг».")

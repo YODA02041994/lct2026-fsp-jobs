@@ -65,9 +65,6 @@ export const AppShell = {
       </div>
     </nav>
     <main class="main"><slot></slot></main>
-    <div class="toasts" aria-live="polite">
-      <div v-for="t in store.toasts" :key="t.id" class="toast" :class="t.type">{{ t.text }}</div>
-    </div>
     <Modal v-if="store.confirm" :title="store.confirm.title" @close="closeConfirm(false)">
       <p class="pre-wrap">{{ store.confirm.text }}</p>
       <template #footer>

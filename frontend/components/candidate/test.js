@@ -44,7 +44,7 @@ export const TestResult = {
   },
   template: `
     <div>
-      <div class="grid" style="grid-template-columns: 220px 1fr; align-items:center">
+      <div class="grid grid-result">
         <div style="text-align:center">
           <div class="muted" style="font-size:13px">Результат теста</div>
           <div class="result-grade">{{ gradeTitle(r.result_grade) }}</div>
@@ -267,12 +267,14 @@ export const CandidateTest = {
               <div class="timer" :class="{ low: timer.left.value <= 15 }" title="Время на задание">⏱ {{ timer.text.value }}</div>
             </div>
             <div class="progress" style="margin-bottom:16px"><span :style="{ width: progress + '%' }"></span></div>
-            <TestItemView :payload="current.payload" v-model="answer" :key="current.id" />
-            <div class="form-actions" style="margin-top:14px">
-              <button type="button" class="btn btn-primary" :disabled="busy || !answerReady()" @click="submit(false)"><span v-if="busy" class="spinner"></span>Ответить</button>
-              <button type="button" class="btn btn-ghost" :disabled="busy" @click="submit(true)">Пропустить</button>
-              <span class="muted" style="font-size:12.5px">Правильность ответа не показывается — это защита от утечки заданий.</span>
-            </div>
+            <form @submit.prevent="answerReady() && submit(false)">
+              <TestItemView :payload="current.payload" v-model="answer" :key="current.id" />
+              <div class="form-actions" style="margin-top:14px">
+                <button type="submit" class="btn btn-primary" :disabled="busy || !answerReady()"><span v-if="busy" class="spinner"></span>Ответить</button>
+                <button type="button" class="btn btn-ghost" :disabled="busy" @click="submit(true)">Пропустить</button>
+                <span class="muted" style="font-size:12.5px">Правильность ответа не показывается — это защита от утечки заданий.</span>
+              </div>
+            </form>
           </div>
         </template>
         <div v-else class="state"><span class="spinner"></span> Готовим следующий блок…</div>

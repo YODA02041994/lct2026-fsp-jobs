@@ -137,7 +137,8 @@ def _py_mutable_default(rng: random.Random) -> Instance:
     calls = [f"{fn}({vals[0]})", f"{fn}({vals[1]})"]
     if rng.random() < 0.5:
         calls.append(f"{fn}({vals[2]}, [])")
-        expl += " Вызов с явным списком на общий список не влияет."
+        if not fixed:
+            expl += " Вызов с явным списком на общий список не влияет."
     tail = f"print(len({fn}({vals[3]})))" if rng.random() < 0.5 else f'print(*{fn}({vals[3]}))'
     code = head + "\n".join(calls) + "\n" + tail
     q = "Что выведет код? " + ("Введите число." if tail.startswith("print(len") else "Введите значения через пробел.")
@@ -151,7 +152,8 @@ def _py_closure(rng: random.Random) -> Instance:
     k = rng.choice([2, 3, 5, 10])
     var = rng.choice(["fs", "funcs", "handlers"])
     bind = rng.random() < 0.4
-    lam = f"lambda i=i: i * {k}" if bind else f"lambda: i * {k}"
+    expr = rng.choice([f"i * {k}", f"i + {k}", f"{k} - i"])
+    lam = f"lambda i=i: {expr}" if bind else f"lambda: {expr}"
     code = (f"{var} = []\nfor i in range({n}):\n    {var}.append({lam})\n"
             f'print(" ".join(str(f()) for f in {var}))')
     expl = ("Значение i зафиксировано аргументом по умолчанию в момент создания лямбды — каждая помнит своё i."
@@ -166,9 +168,10 @@ def _py_closure(rng: random.Random) -> Instance:
 def _py_generator(rng: random.Random) -> Instance:
     while True:
         xs = rng.sample(range(1, 20), rng.randint(5, 6))
-        cond = rng.choice(["x % 2 == 1", "x % 2 == 0", "x > 7", "x < 12"])
+        cond, pred = rng.choice([("x % 2 == 1", lambda x: x % 2 == 1), ("x % 2 == 0", lambda x: x % 2 == 0),
+                                 ("x > 7", lambda x: x > 7), ("x < 12", lambda x: x < 12)])
         mul = rng.choice([2, 3, 10])
-        kept = [x for x in xs if eval(cond, {"x": x})]
+        kept = [x for x in xs if pred(x)]
         if len(kept) >= 3:
             break
     fn = rng.choice(["gen", "produce", "evens"])
@@ -189,28 +192,32 @@ def _py_try_order(rng: random.Random) -> Instance:
     if mode == "early_return":
         arg = 1
     fn = rng.choice(["run", "handle", "process"])
-    code = ("log = []\n\n"
+    log = rng.choice(["log", "trace", "steps"])
+    num = rng.choice([10, 20, 100])
+    sep = rng.choice(["-", ">", " "])
+    early = early.replace("return log", f"return {log}")
+    code = (f"{log} = []\n\n"
             f"def {fn}(x):\n"
             "    try:\n"
-            '        log.append("try")\n'
+            f'        {log}.append("try")\n'
             + early +
-            "        value = 10 // x\n"
+            f"        value = {num} // x\n"
             "    except ZeroDivisionError:\n"
-            '        log.append("except")\n'
+            f'        {log}.append("except")\n'
             "    else:\n"
-            '        log.append("else")\n'
+            f'        {log}.append("else")\n'
             "    finally:\n"
-            '        log.append("finally")\n'
-            "    return log\n\n"
+            f'        {log}.append("finally")\n'
+            f"    return {log}\n\n"
             f"{fn}({arg})\n"
-            'print("-".join(log))')
+            f'print("{sep}".join({log}))')
     expl = {
         "ok": "Без исключения выполняются try, затем else, затем finally.",
         "error": "При делении на ноль срабатывает except, else пропускается, finally выполняется всегда.",
         "early_return": "return внутри try прерывает блок: else не выполняется, но finally выполняется всё равно.",
     }[mode]
-    return Instance(question="Что выведет код? Введите строку без кавычек.", answer=_run_python(code), code=code,
-                    language="python", explanation=expl)
+    return Instance(question="Что выведет код? Введите строку без кавычек" + (", слова через пробел." if sep == " " else "."),
+                    answer=_run_python(code), code=code, language="python", explanation=expl)
 
 
 @template("backend_sql_join_group", title="JOIN с группировкой", competency="SQL: соединение и агрегаты",
@@ -287,7 +294,6 @@ def _docker_layers(rng: random.Random) -> Instance:
         deps, install, run = "package.json", "RUN npm ci", 'CMD ["node", "server.js"]'
         base = "node:20-alpine"
     code = f"FROM {base}\nWORKDIR /app\nCOPY . .\n{install}\n{run}"
-    correct = f"Сначала COPY {deps} и {install.split()[1]} install зависимостей, затем COPY . . — слой с зависимостями будет браться из кеша"
     correct = f"Скопировать сначала только {deps}, выполнить {install}, и лишь потом COPY . ."
     wrong = [
         "Собирать с флагом --no-cache, чтобы сборка была воспроизводимой",
@@ -321,7 +327,10 @@ def _async_gather(rng: random.Random) -> Instance:
             f"    results = await asyncio.gather({', '.join(f'{fn}({k})' for k in ks)})\n"
             '    print(" ".join(str(r) for r in results))\n\n'
             "asyncio.run(main())")
-    return Instance(question="Что выведет код? Введите значения через пробел.", answer=_run_python(code), code=code,
+    # ключ считаем без исполнения: внутри работающего цикла событий (async-роут) asyncio.run() недопустим,
+    # а gather гарантирует порядок результатов по порядку аргументов; тест банка исполняет код независимо
+    answer = " ".join(str(k * mul) for k in ks)
+    return Instance(question="Что выведет код? Введите значения через пробел.", answer=answer, code=code,
                     language="python",
                     explanation="gather возвращает результаты в порядке переданных корутин, а не в порядке их завершения, "
                                 "хотя завершаются они в порядке длительности sleep.")
@@ -358,8 +367,6 @@ def _py_decorators(rng: random.Random) -> Instance:
         first = code.splitlines()[-1][1:]
         second = "exclaim" if first == "shout" else "shout"
         code += f"@{second}\ndef {fn}(text):\n    return text\n\nprint({fn}(\"{text}\"))"
-        expl = (f"Ближайший к функции декоратор ({second}) применяется первым, внешний ({first}) — к результату. "
-                "Порядок меняет регистр восклицательного знака? Нет, но меняет, что к чему применяется: upper() к строке с «!» или «!» к строке в верхнем регистре.")
         expl = (f"Ближайший к функции декоратор ({second}) применяется первым, внешний ({first}) — к его результату; "
                 "итоговая строка собирается изнутри наружу.")
     return Instance(question="Что выведет код? Введите строку без кавычек.", answer=_run_python(code), code=code,

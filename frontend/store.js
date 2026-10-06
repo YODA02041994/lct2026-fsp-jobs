@@ -94,3 +94,9 @@ export function categoryTitle(spec, grade) {
   return `${specName(spec)} · ${gradeTitle(grade)}`;
 }
 export const WEIGHT_TITLES = { stack: 'Стек', grade: 'Грейд', strength: 'Сила профиля', fsp: 'Достижения ФСП', activity: 'Актуальность', conditions: 'Условия' };
+export function skillCode(nameOrCode) {
+  const v = String(nameOrCode || '').trim();
+  const s = store.catalog && store.catalog.skills.find((x) => x.code === v.toLowerCase() || x.name.toLowerCase() === v.toLowerCase());
+  return s ? s.code : v;
+}
+export const CONTACT_METHODS = ['Telegram', 'Почта', 'Телефон', 'Видеозвонок'];

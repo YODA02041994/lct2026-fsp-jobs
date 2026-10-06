@@ -178,8 +178,9 @@ def _qa_fixture_scope(rng: random.Random) -> Instance:
     expl = {"function": "scope=function — фикстура создаётся заново для каждого теста.",
             "module": "scope=module — один экземпляр на модуль, сколько модулей — столько созданий.",
             "session": "scope=session — один экземпляр на весь прогон."}[scope]
-    return _choice(rng, f"Фикстура {name} (в conftest.py) используется тестами в {modules} модулях: {desc} тестов. "
-                        "Сколько раз выполнится connect() за один прогон?", options, correct, expl, code=code, language="python")
+    return _choice(rng, f"Фикстура {name} (в conftest.py) используется тестами в {modules} модулях; число тестов по "
+                        f"модулям: {desc}. Сколько раз выполнится connect() за один прогон?", options, correct, expl,
+                   code=code, language="python")
 
 
 @template("qa_sql_duplicates", title="Найти дубликаты запросом", competency="SQL для тестировщика: проверка уникальности",
@@ -347,7 +348,7 @@ def _qa_lead_pyramid(rng: random.Random) -> Instance:
     n = rng.choice([600, 900, 1400])
     hours = rng.choice([3, 4, 6])
     every = rng.choice([3, 4])
-    text = (f"В проекте {n} e2e-тестов через браузер, прогон {hours} часа, падает каждый {every}-й прогон из-за "
+    text = (f"В проекте {n} e2e-тестов через браузер, прогон {hours} ч, падает каждый {every}-й прогон из-за "
             "нестабильности; юнит- и интеграционных тестов почти нет. Релизы задерживаются.")
     correct = ("Перенести проверки бизнес-логики на уровень юнит- и интеграционных тестов, оставить e2e для ключевых "
                "сквозных сценариев, нестабильные тесты — в карантин с задачами на починку")

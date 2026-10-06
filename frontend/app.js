@@ -96,7 +96,11 @@ const App = defineComponent({
     <template v-else-if="current">
       <component v-if="current.meta.bare" :is="current.component" :key="route.path" />
       <AppShell v-else><component :is="current.component" :key="route.path" /></AppShell>
-    </template>`,
+    </template>
+    <!-- уведомления видны и на страницах входа, поэтому живут в корне -->
+    <div class="toasts" aria-live="polite">
+      <div v-for="t in store.toasts" :key="t.id" class="toast" :class="t.type">{{ t.text }}</div>
+    </div>`,
 });
 
 const app = createApp(App);
