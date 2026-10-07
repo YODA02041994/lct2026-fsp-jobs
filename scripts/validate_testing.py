@@ -20,7 +20,8 @@ from app.services.testing.engine import (REGISTRY, load_all, pick_templates, mak
                                          decide, GRADES, GRADE_THRESHOLDS)
 from app import synth  # noqa: E402
 
-SPEC_BANK = {"backend": True, "frontend": True, "data": True, "qa": True}
+from app.catalog import SPECIALIZATIONS  # noqa: E402
+SPEC_BANK = {c: True for c, _, _, hb, _ in SPECIALIZATIONS if hb}     # специализации со своим банком — из каталога
 
 
 def p_correct(theta: float, code: str, rng: random.Random) -> bool:

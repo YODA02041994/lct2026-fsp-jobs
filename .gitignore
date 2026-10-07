@@ -31,3 +31,7 @@ build/
 # данные справочника календаря — в git
 !backend/app/data/
 !backend/app/data/*.json
+
+# служебные файлы генератора шаблонов (отклонённые черновики и журнал попыток)
+backend/app/services/testing/bank/generated/_rejected/
+backend/app/services/testing/bank/generated/_run_log.jsonl

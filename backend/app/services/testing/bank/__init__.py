@@ -4,4 +4,5 @@ from .base import REGISTRY, TemplateSpec, Instance, template, shuffle_options, c
 
 def load_all() -> dict:
     from . import common, backend, frontend, data, qa  # noqa: F401
+    from . import generated  # noqa: F401  — шаблоны, сгенерированные моделью и проверенные ревью по документации (bank/generated/REGISTRY.md)
     return REGISTRY

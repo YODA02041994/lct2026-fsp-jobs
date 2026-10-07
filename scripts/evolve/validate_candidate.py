@@ -263,10 +263,12 @@ def list_generated() -> dict:
     from app.services.testing.bank import load_all
     from app.services.testing.bank.base import REGISTRY
     load_all()
-    before = set(REGISTRY)
     importlib.import_module(PKG)
+    # с 07.10 пакет generated подключён в load_all, поэтому отбираем по модулю генератора, а не «появилось после импорта»
+    gen_codes = sorted(c for c, s in REGISTRY.items() if s.generate.__module__.startswith(PKG + "."))
+    before = set(REGISTRY) - set(gen_codes)
     out = []
-    for code in sorted(set(REGISTRY) - before):
+    for code in gen_codes:
         s = REGISTRY[code]
         out.append({"code": code, "title": s.title, "competency": s.competency, "spec": (s.specializations or [None])[0],
                     "grade": s.grade_level, "techs": list(s.technologies), "fmt": s.fmt,
