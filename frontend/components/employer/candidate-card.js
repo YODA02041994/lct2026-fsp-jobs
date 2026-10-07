@@ -77,7 +77,7 @@ export const CandidateCard = {
         <div class="chips" style="margin-bottom:8px">
           <Tag v-for="s in skills" :key="s.skill" :confirmed="s.confirmed_by_test">{{ s.name || skillName(s.skill) }}</Tag>
         </div>
-        <div class="muted" style="font-size:12.5px;margin-bottom:8px" v-if="skills.length">Подтверждено тестом: {{ confirmedCount }} из {{ skills.length }}</div>
+        <div class="muted" style="font-size:12.5px;margin-bottom:8px" v-if="skills.length">Все навыки кандидата — подтверждено тестом: {{ confirmedCount }} из {{ skills.length }}</div>
         <div class="ach" v-if="card.achievements_summary">Достижения ФСП: <strong>{{ card.achievements_summary }}</strong></div>
         <div v-if="card.contacts_unlocked && card.contacts" class="contacts" style="margin-top:10px">
           <strong>Контакты открыты</strong>
