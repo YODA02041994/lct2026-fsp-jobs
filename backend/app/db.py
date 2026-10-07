@@ -1,4 +1,5 @@
 """Подключение к базе. SQLite для разработки и тестов, PostgreSQL в контейнерах и на стенде."""
+import os
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
 from .config import get_settings
@@ -13,6 +14,10 @@ def _make_engine():
     kw = {}
     if url.startswith("sqlite"):
         kw["connect_args"] = {"check_same_thread": False}
+        # SQLite не создаёт папки сам: на свежем клоне backend/data/ нет (она в .gitignore) — создаём
+        path = url.split("sqlite:///", 1)[-1]
+        if path and path != ":memory:" and not path.startswith("file:"):
+            os.makedirs(os.path.dirname(os.path.abspath(path)) or ".", exist_ok=True)
     eng = create_engine(url, pool_pre_ping=True, **kw)
     if url.startswith("sqlite"):
         @event.listens_for(eng, "connect")
