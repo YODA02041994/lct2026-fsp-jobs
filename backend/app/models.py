@@ -134,7 +134,7 @@ class Template(Base):
     """Шаблон задания. Экземпляры порождаются генератором по зерну (docs/08)."""
     __tablename__ = "template"
     code: Mapped[str] = mapped_column(String(60), primary_key=True)
-    competency: Mapped[str] = mapped_column(String(60))
+    competency: Mapped[str] = mapped_column(String(160))                # в Postgres длина проверяется строго (test_bank: fields_fit_db_columns)
     specializations: Mapped[list] = mapped_column(JSON, default=list)   # [] — общий для всех
     technologies: Mapped[list] = mapped_column(JSON, default=list)
     fmt: Mapped[str] = mapped_column(String(20))                        # exact / choice / multichoice

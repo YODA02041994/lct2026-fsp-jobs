@@ -202,3 +202,12 @@ def test_exact_share(module):
 def test_formats_present():
     fmts = Counter(s.fmt for s in SPECS)
     assert all(fmts[f] > 0 for f in FORMATS), fmts
+
+
+def test_fields_fit_db_columns():
+    """SQLite не проверяет длину строк, Postgres на стенде — проверяет: поля шаблона должны влезать в колонки таблицы template."""
+    from app.models import Template
+    max_code, max_comp = Template.code.type.length, Template.competency.type.length
+    for spec in SPECS:
+        assert len(spec.code) <= max_code, f"{spec.code}: код длиннее {max_code}"
+        assert len(spec.competency) <= max_comp, f"{spec.code}: компетенция {len(spec.competency)} знаков, колонка {max_comp}"
