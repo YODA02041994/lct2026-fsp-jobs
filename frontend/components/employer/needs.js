@@ -81,6 +81,7 @@ export const EmployerNeedNew = {
       <dl class="kv">
         <dt>Специализация</dt><dd>{{ specName(created.extracted.specialization_code || created.need.specialization_code) }}</dd>
         <dt>Грейд</dt><dd>{{ gradeTitle(created.extracted.grade || created.need.grade) }}</dd>
+        <dt>Разбор текста</dt><dd>{{ created.extracted.source === 'rules+model' ? 'правила и языковая модель (текст обезличен)' : 'правила по словарю' }}</dd>
         <dt>Технологии из текста</dt><dd><span v-if="!created.extracted.stack || !created.extracted.stack.length" class="muted">не распознаны — используется заданный стек</span><span v-else class="chips"><span v-for="s in created.extracted.stack" :key="s" class="chip chip-tech">{{ skillName(s) }}</span></span></dd>
         <dt>Стек потребности</dt><dd><span class="chips"><span v-for="s in created.need.stack" :key="s" class="chip">{{ skillName(s) }}</span></span></dd>
         <dt>Зарплата</dt><dd>{{ moneyRange(created.need.salary_min, created.need.salary_max) }}</dd>

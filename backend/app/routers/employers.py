@@ -7,7 +7,7 @@ from ..db import get_db
 from ..deps import current_employer
 from ..models import Employer, Need, Selection, SelectionVersion, Candidate, Invitation, Application, Vacancy, GRADES
 from ..schemas import EmployerUpdate, NeedIn, SelectionIn, RefineIn
-from ..services.need_parser import parse
+from ..services.need_parser import parse_full
 from ..services.skills_catalog import normalize_skill
 from ..services.matching import build_selection, candidate_pool, score_candidate, last_thetas
 from ..services.views import employer_view, candidate_card
@@ -59,7 +59,7 @@ def _need_view(n: Need, db: Session | None = None) -> dict:
 
 @router.post("/needs", status_code=201)
 def create_need(data: NeedIn, e: Employer = Depends(current_employer), db: Session = Depends(get_db)):
-    ext = parse(f"{data.title}. {data.text}")
+    ext = parse_full(f"{data.title}. {data.text}")     # правила, затем модель, если настроена
     if data.salary_min is not None and data.salary_max is not None and data.salary_min > data.salary_max:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Зарплата «от» больше зарплаты «до»")
     if data.grade and data.grade not in GRADES:

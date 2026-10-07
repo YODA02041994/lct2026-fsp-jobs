@@ -47,3 +47,69 @@ def parse(text: str) -> dict:
     if m:
         out["salary_min"], out["salary_max"] = int(m.group(1)) * 1000, int(m.group(2)) * 1000
     return out
+
+
+# --- уточнение внешней моделью (необязательно) ------------------------------------------------------------
+# Модель получает текст без телефонов, почты и Telegram и возвращает JSON. Ответ модели — ненадёжный ввод:
+# каждое поле проверяется по справочнику (коды технологий, грейды, специализации), остальное отбрасывается.
+from . import llm
+from .skills_catalog import normalize_skill
+from ..catalog import GRADE_TITLE, SPEC_TITLE
+
+_MODEL_PROMPT = (
+    "Ты разбираешь описание потребности работодателя в ИТ-специалисте. Верни JSON с полями: "
+    "specialization_code (один из: {specs}), grade (один из: junior, middle, senior, lead; null если не ясно), "
+    "stack (список технологий, которые требуются, по-английски как принято: PostgreSQL, Kotlin, Kubernetes…; "
+    "не добавляй технологии, которых нет в тексте), salary_min и salary_max (рубли в месяц, целые числа или null). "
+    "Только JSON, без пояснений."
+)
+
+
+def parse_with_model(text: str) -> dict | None:
+    """→ проверенные поля из ответа модели или None (модель не настроена, не ответила, ответ не разобран)."""
+    if not llm.enabled():
+        return None
+    from .resume import deidentify
+    clean = deidentify(text or "")[:6000]
+    data = llm.chat_json([{"role": "system", "content": _MODEL_PROMPT.format(specs=", ".join(SPEC_TITLE))},
+                          {"role": "user", "content": clean}], max_tokens=500)
+    if not isinstance(data, dict):
+        return None
+    out: dict = {}
+    sp = data.get("specialization_code")
+    if isinstance(sp, str) and sp.strip().lower() in SPEC_TITLE:
+        out["specialization_code"] = sp.strip().lower()
+    g = data.get("grade")
+    if isinstance(g, str) and g.strip().lower() in GRADE_TITLE:
+        out["grade"] = g.strip().lower()
+    stack = []
+    for s in data.get("stack") or []:
+        code = normalize_skill(str(s)) if isinstance(s, (str, int)) else None
+        if code and code not in stack:
+            stack.append(code)
+    if stack:
+        out["stack"] = stack
+    for k in ("salary_min", "salary_max"):
+        v = data.get(k)
+        if isinstance(v, (int, float)) and 10_000 <= v <= 5_000_000:
+            out[k] = int(v)
+    if "salary_min" in out and "salary_max" in out and out["salary_min"] > out["salary_max"]:
+        out.pop("salary_min"); out.pop("salary_max")
+    return out or None
+
+
+def parse_full(text: str) -> dict:
+    """Правила, затем модель: модель заполняет пропуски правил и дополняет стек. Поле source говорит, что сработало."""
+    out = parse(text)
+    out["source"] = "rules"
+    m = parse_with_model(text)
+    if not m:
+        return out
+    for k in ("specialization_code", "grade", "salary_min", "salary_max"):
+        if out.get(k) is None and m.get(k) is not None:
+            out[k] = m[k]
+    for code in m.get("stack") or []:
+        if code not in out["stack"]:
+            out["stack"].append(code)
+    out["source"] = "rules+model"
+    return out

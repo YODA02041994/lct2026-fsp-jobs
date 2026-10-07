@@ -17,7 +17,7 @@ GRADES = [
     ("lead", "Lead", "руководит разработкой и командой"),
 ]
 WORK_FORMATS = [("office", "Офис"), ("remote", "Удалённо"), ("hybrid", "Гибрид")]
-DEFAULT_WEIGHTS = {"stack": 0.35, "grade": 0.25, "strength": 0.20, "fsp": 0.10, "activity": 0.05, "conditions": 0.05}
+DEFAULT_WEIGHTS = {"stack": 0.40, "grade": 0.24, "strength": 0.16, "fsp": 0.06, "activity": 0.06, "conditions": 0.08}   # подобраны эволюцией 07.10, docs/09
 GRADE_TITLE = {c: t for c, t, _ in GRADES}
 SPEC_TITLE = {c: n for c, n, *_ in SPECIALIZATIONS}
 

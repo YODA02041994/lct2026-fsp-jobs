@@ -30,7 +30,8 @@ def _startup():
 @app.get("/api/health", tags=["service"])
 def health():
     from .services.testing.engine import REGISTRY
-    return {"status": "ok", "templates": len(REGISTRY), "demo_mode": settings.demo_mode}
+    from .services import llm
+    return {"status": "ok", "templates": len(REGISTRY), "demo_mode": settings.demo_mode, "model": llm.enabled()}
 
 
 front = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", settings.frontend_dir))

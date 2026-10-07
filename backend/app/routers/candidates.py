@@ -114,22 +114,25 @@ def patch_achievement(aid: int, hidden: bool, c: Candidate = Depends(current_can
 # --- резюме из PDF и PDF-профиль -----------------------------------------------------------------
 from fastapi import UploadFile, File
 from fastapi.responses import Response
-from ..services.resume import pdf_text, parse_resume
+from ..services.resume import pdf_text, parse_resume, enrich_with_model
 from ..services.profile_pdf import build_profile_pdf
 
 
 @router.post("/resume")
-async def upload_resume(file: UploadFile = File(...), apply: bool = False, c: Candidate = Depends(current_candidate), db: Session = Depends(get_db)):
-    """Распознаёт PDF-резюме. Поля предзаполняются; уже заполненные перезаписываются только при apply=1."""
+def upload_resume(file: UploadFile = File(...), apply: bool = False, c: Candidate = Depends(current_candidate), db: Session = Depends(get_db)):
+    """Распознаёт PDF-резюме. Поля предзаполняются; уже заполненные перезаписываются только при apply=1.
+    Обычная (не async) функция: FastAPI выполняет её в пуле потоков, и обращение к внешней модели не держит цикл событий."""
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Нужен файл PDF")
-    data = await file.read()
+    data = file.file.read()
     if len(data) > 5 * 1024 * 1024:
         raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "Файл больше 5 МБ")
     text = pdf_text(data)
     if not text.strip():
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "В PDF не найден текст (возможно, это скан)")
     parsed = parse_resume(text)
+    parsed.setdefault("source", "rules")
+    parsed = enrich_with_model(text, parsed)        # без ключа модели возвращает разбор правилами как есть
     applied = False
     for k in ("full_name", "phone", "telegram", "city", "experience_years", "roles", "soft_skills", "about"):
         v = parsed.get(k)
@@ -143,7 +146,7 @@ async def upload_resume(file: UploadFile = File(...), apply: bool = False, c: Ca
         if code not in existing:
             db.add(CandidateSkill(candidate_id=c.id, skill=code, source="resume"))
             applied = True
-    log(db, c.user_id, "resume_parsed", "candidate", c.id, skills=len(parsed["skills"]))
+    log(db, c.user_id, "resume_parsed", "candidate", c.id, skills=len(parsed["skills"]), source=parsed.get("source"))
     db.commit()
     db.refresh(c)
     return {"parsed": parsed, "applied": applied, "profile": candidate_profile(c, db)}
