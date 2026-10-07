@@ -225,8 +225,18 @@ def render_pdf(md: str, pdf_path: str) -> None:
     pdf.output(pdf_path)
 
 
+def openapi_ops() -> int:
+    sys.path.insert(0, os.path.join(ROOT, "backend"))
+    os.environ.setdefault("FSP_DATABASE_URL", "sqlite:///:memory:")
+    os.environ.setdefault("FSP_SECRET_KEY", "docs")
+    from app.main import app  # noqa: E402
+    return sum(1 for ops in app.openapi()["paths"].values() for m in ops if m in ("get", "post", "put", "patch", "delete"))
+
+
 def main():
     today = dt.date.today().strftime("%d.%m.%Y")
+    n_ops = openapi_ops()
+    n_tests = 644
     parts = []
     parts.append(f"""# Карьера ФСП — сопроводительная документация
 
@@ -260,8 +270,8 @@ def main():
 без истории ФСП проходит тот же путь, и его профиль обрабатывается корректно. Дополнительно: отклики на вакансии, короткие
 регулярные задания, PDF-профиль, приглашения со статусами, журнал действий.
 
-Ключевые числа на {today}: 48 операций API в OpenAPI; банк из 136 параметризованных шаблонов заданий для восьми специализаций;
-644 автотеста; на контрольных синтетических мирах с реалистичным тестом подбор даёт
+Ключевые числа на {today}: {n_ops} операций API в OpenAPI; банк из 136 параметризованных шаблонов заданий для восьми специализаций;
+{n_tests} автотестов; на контрольных синтетических мирах с реалистичным тестом подбор даёт
 P@5 0,77–0,97 против 0,65–0,83 у подбора по словам резюме и держит преимущество на восьми вариантах генератора;
 прототип развёрнут и работает на стенде.
 """)
