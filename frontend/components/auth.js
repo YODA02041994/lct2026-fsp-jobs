@@ -55,7 +55,7 @@ export const LoginPage = {
         <div v-if="demo.length" class="demo-box">
           <strong>Демонстрационный режим.</strong> Учётные записи для проверки (пароль подставится сам):
           <ul style="margin:6px 0 0;padding-left:18px">
-            <li v-for="a in demo" :key="a.email"><button type="button" @click="fill(a)">{{ a.email }}</button> — {{ a.title }}</li>
+            <li v-for="a in demo" :key="a.email"><button type="button" @click="fill(a)">{{ a.email }}</button> — {{ a.note || a.title }}</li>
           </ul>
         </div>
       </div></div>

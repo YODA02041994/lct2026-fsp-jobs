@@ -30,7 +30,7 @@ export const TestResult = {
     });
     const confidence = computed(() => {
       const sd = Number(r.value.theta_sd || 0.6);
-      return sd <= 0.35 ? 'высокая' : sd <= 0.55 ? 'средняя' : 'низкая';
+      return sd <= 0.35 ? 'высокая' : sd <= 0.55 ? 'средняя' : 'ограниченная (10 заданий)';
     });
     async function apply() {
       const ok = await confirmDialog({ title: `Применить грейд ${gradeTitle(targetGrade.value)}?`, text: 'Категория изменится сразу. Следующая смена грейда будет доступна через 90 дней.', ok: 'Применить' });
@@ -58,7 +58,7 @@ export const TestResult = {
             <template v-else> Оценка минус разброс выше порога следующего грейда — можно повысить категорию до {{ gradeTitle(targetGrade) }}.</template>
           </div>
           <dl class="kv">
-            <dt>Верных ответов</dt><dd>{{ r.correct_total }} из {{ r.items_total }}</dd>
+            <dt>Верных ответов</dt><dd>{{ r.items_total ? r.correct_total + ' из ' + r.items_total : '— (демонстрационный сеанс без заданий)' }}</dd>
             <dt>Оценка умения θ</dt><dd>{{ fmt(r.theta) }} ± {{ fmt(r.theta_sd) }} <span class="muted">· уверенность {{ confidence }}</span></dd>
           </dl>
         </div>
@@ -82,7 +82,7 @@ export const TestResult = {
         <div v-for="t in r.by_technology" :key="t.skill" class="tech-row">
           <span>{{ t.name || skillName(t.skill) }} <span v-if="t.total && t.correct / t.total >= 0.5" class="tag-check" title="подтверждено тестом">✓</span></span>
           <span class="bar"><span class="bar-fill" :style="{ width: (t.total ? Math.round(100 * t.correct / t.total) : 0) + '%' }"></span></span>
-          <span class="muted">{{ t.correct }} из {{ t.total }}</span>
+          <span class="muted">{{ t.total ? t.correct + ' из ' + t.total : '—' }}</span>
         </div>
       </div>
       <hr class="sep">

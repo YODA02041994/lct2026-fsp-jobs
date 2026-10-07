@@ -392,10 +392,13 @@ docker compose up --build
             os.remove(pdf_path)
         cmd = [CHROME, "--headless=new", "--disable-gpu", "--no-first-run", "--disable-extensions", "--hide-scrollbars",
                "--user-data-dir=/tmp/chrome-docs-build", "--no-pdf-header-footer", f"--print-to-pdf={pdf_path}", "file://" + html_path]
+        # Chrome плодит дочерние процессы, которые держат каналы вывода, поэтому вывод не перехватываем, а по тайм-ауту гасим всю группу
+        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         try:
-            subprocess.run(cmd, capture_output=True, text=True, timeout=900)   # на этом Маке Chrome стартует очень долго
+            proc.wait(timeout=900)   # на этом Маке Chrome стартует очень долго
         except subprocess.TimeoutExpired:
-            pass
+            import signal
+            os.killpg(proc.pid, signal.SIGKILL)
     if not os.path.exists(pdf_path):
         print("Chrome не отрисовал — запасной путь fpdf2")
         render_pdf(md, pdf_path)

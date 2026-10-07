@@ -132,7 +132,7 @@ def decide(theta: float, sd: float, claimed: str) -> tuple[str, str]:
     ci = GRADES.index(claimed)
     mi = GRADES.index(measured)
     if mi > ci and theta - sd >= GRADE_THRESHOLDS[GRADES[ci + 1]]:
-        return measured, "suggest_higher"
+        return GRADES[ci + 1], "suggest_higher"      # за один тест категория повышается не более чем на грейд; θ показывается отдельно
     if mi < ci:
         return measured, "suggest_lower"
     return claimed if mi == ci else measured, "confirmed"

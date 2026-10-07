@@ -134,7 +134,14 @@ def make_candidates(n: int, rng: random.Random, events: list[dict], honesty: str
     return out
 
 
+ONLY_PAST_EVENTS = False   # демо-сид ставит True: достижения только по уже прошедшим событиям; валидационные миры — как раньше
+
+
 def make_fsp_history(rng: random.Random, idx: int, events: list[dict], theta: float) -> dict:
+    if ONLY_PAST_EVENTS:
+        import datetime as _dt
+        today = _dt.date.today().isoformat()
+        events = [e for e in events if str(e.get("date_start", ""))[:10] <= today] or events
     fsp_id = f"FSP-{100000 + idx * 7 + rng.randint(0, 6)}"
     n_ev = rng.choice([1, 1, 2, 2, 3])
     results = []

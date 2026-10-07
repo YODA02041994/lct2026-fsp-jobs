@@ -282,7 +282,7 @@ def main():
             "Банк: 96 рукописных шаблонов и 40 от модели — через валидатор и четыре ревью по документации"]
     for idx, text in zip((15, 16, 17, 18, 19), rows):
         set_text(ph(s, idx), text, size=11.5, color=DARK)
-    shot = first_existing("candidate_test.png", "06_test_item.png", "test_item.png")
+    shot = first_existing("16_test_question.png", "candidate_test.png")
     if shot:
         box = [sh for sh in s.shapes if not sh.is_placeholder and sh.left < Inches(1) and sh.top > Inches(1) and sh.width > Inches(5)]
         if box:
@@ -328,7 +328,7 @@ def main():
     # 26 — демо работодателя
     s = S[26]
     set_title(s, "ДЕМО: РАБОТОДАТЕЛЬ")
-    picture(s, 14, "employer_selection.png", "07_employer_selection.png", "08_employer_selection.png")
+    picture(s, 14, "11_employer_selection.png", "employer_selection.png")
     set_text(ph(s, 15), "Потребность описывается текстом: специализация, грейд, стек и зарплата распознаются сами", size=10, color=DARK)
     set_text(ph(s, 16), "Подборка по категориям: оценка «подходит», шесть слагаемых и обоснование у каждого кандидата", size=10, color=DARK)
     set_text(ph(s, 17), "Приглашение с зарплатой «от–до»; контакты открываются после согласия кандидата", size=10, color=DARK)
@@ -336,9 +336,9 @@ def main():
     # 27 — демо кандидата
     s = S[27]
     set_title(s, "ДЕМО: КАНДИДАТ")
-    picture(s, 14, "candidate_test.png", "06_test_item.png"); picture(s, 18, "candidate_profile.png", "02_candidate_profile.png")
-    set_text(ph(s, 15), "Тест: задание с параметрами, таймер, два адаптивных блока; результат — грейд и подтверждённые технологии", size=10, color=DARK)
-    set_text(ph(s, 16), "Профиль: категория, навыки, достижения ФСП с уровнем доверия, приглашения и приватность", size=10, color=DARK)
+    picture(s, 14, "17_test_result.png", "candidate_test.png"); picture(s, 18, "05_candidate_achievements.png", "02_candidate_profile.png")
+    set_text(ph(s, 15), "Результат теста: грейд, θ с интервалом, разрез по технологиям; подтверждённые технологии попадают в профиль", size=10, color=DARK)
+    set_text(ph(s, 16), "Достижения ФСП: подтверждено источником, уровень, срок действия; ФСП ID связан по OpenID Connect", size=10, color=DARK)
 
     # 18 — ограничения и план (сетка 6)
     s = S[18]

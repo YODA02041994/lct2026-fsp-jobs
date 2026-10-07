@@ -54,6 +54,7 @@ def _user(db, email: str, role: str) -> User:
 
 
 def seed_demo(n_candidates: int = 120, rng_seed: int = 7, honesty: str = "typical") -> dict:
+    synth.ONLY_PAST_EVENTS = True       # в демо-данных достижения только по прошедшим событиям календаря
     rng = random.Random(rng_seed)
     events = synth.load_events()
     stats = {"candidates": 0, "employers": 0, "vacancies": 0, "events": 0, "achievements": 0}
