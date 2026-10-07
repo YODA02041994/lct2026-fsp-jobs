@@ -1,35 +1,31 @@
 """Механика подбора (docs/07): категории, ранжирование по объяснимым слагаемым, обоснование.
 
-Шесть слагаемых от 0 до 1 показываются работодателю как есть:
-  stack      — покрытие технологий потребности: подтверждённая тестом 0,85…1,0 (по доле верных), заявленная без проверки —
-               от 0,12 до 0,80 в зависимости от того, насколько θ кандидата соответствует грейду потребности, проваленная тестом 0,12
-  grade      — совпадение подтверждённого грейда (1), соседний (0,5); заявленный грейд — только подсказка и только если он
-               соседний с подтверждённым; заявленный на два выше подтверждённого снижает слагаемое
-  strength   — θ последнего теста, приведённый к [0, 1], со штрафом за давность
-  fsp        — уровень подтверждённого достижения A1–A5 → 0,2…0,7 (вклад ограничен: достижение решает ничью, а не перебивает стек)
-  activity   — активность за последние дни
-  conditions — пересечение зарплаты и совпадение формата работы
+Устройство:
+  1. candidate_features / need_features — наблюдаемые признаки из базы в виде словарей (единственное место, где ORM
+     превращается в признаки; его же использует scripts/evolve/features.py, поэтому поиск формулы и бой видят одно и то же);
+  2. matching_formula.score — сама формула (EVOLVE-BLOCK, найден эволюционным поиском и установлен install_formula.py;
+     эталон и сверка — scripts/evolve/);
+  3. калибровка — сырой итог монотонно переводится в вероятность «кандидат подходит» (scripts/evolve/calibrate.py);
+  4. обоснование одной строкой из тех же слагаемых.
 
-Итог = ворота × (Σ вес × слагаемое). Ворота = (0,45 + 0,55·stack) · (0,55 + 0,45·grade): стек и грейд — обязательные
-множители, остальное — добавка. Полное совпадение (stack ≥ 0,8 и grade = 1) получает +8 %. Итог приведён к шкале 0…1.
-Форма и константы получены эволюционным поиском на синтетических мирах (docs/09, раздел «Самоулучшение формулы»);
-эталон — scripts/evolve/best_2026-10-07.py, сверка переноса — scripts/evolve/check_port.py.
+Слагаемые от 0 до 1 (их видит работодатель): stack — покрытие технологий потребности с учётом подтверждения тестом;
+grade — соответствие подтверждённого грейда (заявленный — только подсказка); strength — θ относительно требуемого грейда
+с учётом давности; fsp — подтверждённое достижение ФСП (вклад ограничен); activity — активность; conditions — зарплата
+и формат. Стек и грейд — обязательные множители, остальное — добавка. Подробности и цифры — docs/07 и docs/09.
 """
 from __future__ import annotations
+import math
 from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from ..catalog import DEFAULT_WEIGHTS, category_title, SPEC_TITLE, GRADE_TITLE
+from ..catalog import DEFAULT_WEIGHTS, category_title, GRADE_TITLE
 from ..models import Candidate, TestSession, GRADES
 from .skills_catalog import skill_name
+from . import matching_formula as formula
+from .matching_formula import LEVEL_SCORE, SPEC_DISCIPLINE  # noqa: F401  (нужны features.py и проверкам)
 
-LEVEL_SCORE = {"A1": 0.2, "A2": 0.4, "A3": 0.6, "A4": 0.8, "A5": 1.0}
-FSP_CAP = 0.7
-BONUS_FULL_MATCH = 1.08
-# какая дисциплина спортивного программирования ближе к специализации
-SPEC_DISCIPLINE = {"backend": {"algorithmic", "product"}, "frontend": {"product"}, "fullstack": {"product"}, "mobile": {"product"},
-                   "data": {"algorithmic", "product"}, "devops": {"product", "security"}, "qa": {"product"}, "analytics": {"product"},
-                   "security": {"security"}}
+CALIBRATION = {"a": 9.6380, "b": -3.4724}     # p = σ(a·raw + b); calibrate.py на мирах 11,12,13,16,17, проверено на 14 и 15 (docs/09)
+TRUSTED = ("source", "document")
 
 
 def _aware(dt):
@@ -38,148 +34,101 @@ def _aware(dt):
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
-def theta_relative(theta: float | None, need_grade: str | None) -> float:
-    """θ кандидата относительно ожидаемого для грейда потребности, от −1 до +1.
-    Ожидаемое θ — растянутая шкала −2,5 (junior) … +2,5 (lead); без теста — −0,5."""
-    if need_grade not in GRADES:
-        return 0.0
-    expected = -2.5 + GRADES.index(need_grade) / max(len(GRADES) - 1, 1) * 5.0
-    if theta is None:
-        return -0.5
-    return max(-1.0, min(1.0, (theta - expected) / 2.5))
+def _days(now: datetime, dt) -> int | None:
+    return (now - _aware(dt)).days if dt else None
 
 
-def untested_weight(rel: float) -> float:
-    """Вес технологии, заявленной без проверки: тем выше, чем сильнее θ относительно грейда потребности."""
-    return min(max(0.20 + 0.55 * (rel + 1.0) / 2.0, 0.12), 0.80)
+def candidate_features(c: Candidate, last_theta: tuple | None, now: datetime | None = None) -> dict:
+    """Наблюдаемые признаки кандидата для формулы. Истинных данных здесь нет и быть не может."""
+    now = now or datetime.now(timezone.utc)
+    theta, fin = last_theta if last_theta else (None, None)
+    acts = [a for a in c.achievements if not a.hidden and a.status == "active" and a.trust_level in TRUSTED]
+    return {
+        "id": c.id, "spec": c.specialization_code, "grade": c.grade, "claimed_grade": c.claimed_grade,
+        "skills": {k.skill: {"confirmed": bool(k.confirmed_by_test), "tested": k.test_score is not None, "score": k.test_score} for k in c.skills},
+        "theta": theta, "theta_days": _days(now, fin) if theta is not None else None,
+        "fsp": [{"level": a.level_code, "discipline": a.discipline} for a in acts],
+        "active_days": _days(now, c.last_active_at) if c.last_active_at else 999,
+        "salary_min": c.salary_min, "salary_max": c.salary_max, "work_format": c.work_format,
+    }
 
 
-def stack_part(need_stack: list[str], cand_skills, untested_w: float = 0.4) -> tuple[float, dict]:
-    if not need_stack:
-        return 0.0, {"confirmed": [], "declared": [], "failed": [], "missing": []}
+def need_features(need: dict) -> dict:
+    return {"spec": need.get("specialization_code"), "grade": need.get("grade"), "stack": list(need.get("stack") or []),
+            "salary_min": need.get("salary_min"), "salary_max": need.get("salary_max"), "work_format": need.get("work_format")}
+
+
+def stack_detail(need_stack: list[str], cand_skills) -> dict:
+    """Какие технологии потребности подтверждены тестом, заявлены без проверки, провалены, отсутствуют — для обоснования."""
     conf, decl, failed, miss = [], [], [], []
-    acc = 0.0
     by = {k.skill: k for k in cand_skills}
     for s in need_stack:
         k = by.get(s)
         if k and k.confirmed_by_test:
             conf.append(s)
-            acc += 0.85 + 0.15 * min(max(k.test_score, 0.0), 1.0) if k.test_score is not None else 1.0
         elif k and k.test_score is not None:
-            failed.append(s)                 # заявлена, проверена тестом, не подтверждена
-            acc += 0.12
+            failed.append(s)
         elif k:
-            decl.append(s)                   # заявлена, тестом не проверялась
-            acc += untested_w
+            decl.append(s)
         else:
             miss.append(s)
-    return min(acc / len(need_stack), 1.0), {"confirmed": conf, "declared": decl, "failed": failed, "missing": miss}
+    return {"confirmed": conf, "declared": decl, "failed": failed, "missing": miss}
 
 
-def grade_part(need_grade: str | None, cand_grade: str | None, claimed_grade: str | None = None, rel: float = 0.0) -> tuple[float, bool]:
-    """→ (значение, использована ли подсказка заявленного грейда).
-    Точное совпадение при явно слабом θ (rel < −0,5) стоит 0,6, а не 1."""
-    if need_grade not in GRADES:
-        return 0.0, False
-    options = [cand_grade]
-    if claimed_grade in GRADES and cand_grade in GRADES and abs(GRADES.index(claimed_grade) - GRADES.index(cand_grade)) == 1:
-        options.append(claimed_grade)
-    best, used = 0.0, False
-    for i, g in enumerate(options):
-        if g not in GRADES:
-            continue
-        d = abs(GRADES.index(need_grade) - GRADES.index(g))
-        gv = 1.0 if d == 0 else 0.5 if d == 1 else 0.0
-        if gv == 1.0 and rel < -0.5:
-            gv = 0.6
-        if gv > best:
-            best, used = gv, i == 1
-    if claimed_grade in GRADES and cand_grade in GRADES and GRADES.index(claimed_grade) > GRADES.index(cand_grade) + 1:
-        best *= 0.7                          # заявил на два грейда выше подтверждённого
-    return best, used
-
-
-def strength_part(theta: float | None, finished_at) -> tuple[float, str]:
-    if theta is None:
-        return 0.0, "тест не пройден"
-    base = min(max((theta + 2.5) / 5.0, 0.0), 1.0)        # θ от −2,5 до +2,5 → 0…1
-    days = (datetime.now(timezone.utc) - _aware(finished_at)).days if finished_at else 0
-    decay = 1.0 if days <= 90 else max(0.6, 1.0 - (days - 90) / 365)
-    return base * decay, f"θ = {theta:.2f}, {days} дн. назад"
-
-
-def fsp_part(c: Candidate) -> tuple[float, str | None]:
-    acts = [a for a in c.achievements if not a.hidden and a.status == "active" and a.trust_level in ("source", "document")]
+def fsp_text(c: Candidate) -> str | None:
+    acts = [a for a in c.achievements if not a.hidden and a.status == "active" and a.trust_level in TRUSTED]
     if not acts:
-        return 0.0, None
-    best, best_val = None, 0.0
+        return None
+    best, best_val = None, -1.0
     for a in acts:
         v = LEVEL_SCORE.get(a.level_code, 0.2)
         if a.discipline and c.specialization_code and a.discipline not in SPEC_DISCIPLINE.get(c.specialization_code, set()):
             v *= 0.5
         if v > best_val:
             best, best_val = a, v
-    return min(best_val, FSP_CAP), f"{best.title}" + (" (подтверждено источником)" if best.trust_level == "source" else " (подтверждено документом)")
+    return f"{best.title}" + (" (подтверждено источником)" if best.trust_level == "source" else " (подтверждено документом)")
 
 
-def activity_part(c: Candidate) -> float:
-    if not c.last_active_at:
-        return 0.2
-    days = (datetime.now(timezone.utc) - _aware(c.last_active_at)).days
-    return 1.0 if days <= 7 else 0.6 if days <= 30 else 0.2
-
-
-def conditions_part(c: Candidate, salary_min, salary_max, work_format) -> float:
-    parts, n = 0.0, 0
-    if salary_min is not None and salary_max is not None and c.salary_min is not None:
-        n += 1
-        lo, hi = max(salary_min, c.salary_min), min(salary_max, c.salary_max or salary_max)
-        parts += 1.0 if lo <= hi else 0.0
-    if work_format and c.work_format:
-        n += 1
-        parts += 1.0 if (work_format == c.work_format or "hybrid" in (work_format, c.work_format)) else 0.0
-    return parts / n if n else 0.0
-
-
-def combine(parts: dict, w: dict) -> float:
-    """Ворота стек×грейд, умноженные на взвешенную сумму; надбавка за полное совпадение; шкала 0…1."""
-    gate = (0.45 + 0.55 * parts["stack"]) * (0.55 + 0.45 * parts["grade"])
-    total = gate * sum(w[k] * parts[k] for k in parts)
-    if parts["stack"] >= 0.8 and parts["grade"] >= 1.0:
-        total *= BONUS_FULL_MATCH
-    return total / BONUS_FULL_MATCH
+def calibrated(raw: float) -> float:
+    """Сырой итог → вероятность «подходит» (монотонно, порядок не меняется)."""
+    return 1.0 / (1.0 + math.exp(-(CALIBRATION["a"] * raw + CALIBRATION["b"])))
 
 
 def score_candidate(c: Candidate, need: dict, weights: dict, last_theta: tuple | None) -> dict:
-    """need: {specialization_code, grade, stack, salary_min, salary_max, work_format}."""
+    """need: {specialization_code, grade, stack, salary_min, salary_max, work_format}.
+    score — калиброванная оценка, если потребность задана (есть грейд или стек), иначе сырой итог; raw_score — сырой итог всегда."""
     w = {**DEFAULT_WEIGHTS, **(weights or {})}
+    feat = candidate_features(c, last_theta)
+    nf = need_features(need)
+    raw_score, raw_parts = formula.score(feat, nf, w)
+    hint = False
+    if c.claimed_grade and c.claimed_grade != c.grade:
+        _, parts_no = formula.score({**feat, "claimed_grade": None}, nf, w)
+        hint = raw_parts["grade"] > parts_no["grade"] + 1e-9
+    inflated = bool(c.claimed_grade in GRADES and c.grade in GRADES and GRADES.index(c.claimed_grade) > GRADES.index(c.grade) + 1)
+    has_need = bool(nf["grade"] or nf["stack"])
+    score = calibrated(raw_score) if has_need else min(raw_score, 1.0)
+    detail = stack_detail(nf["stack"], c.skills)
     theta, fin = last_theta if last_theta else (None, None)
-    rel = theta_relative(theta, need.get("grade"))
-    stack_v, stack_d = stack_part(need.get("stack") or [], c.skills, untested_weight(rel))
-    grade_v, hint = grade_part(need.get("grade"), c.grade, c.claimed_grade, rel)
-    str_v, str_text = strength_part(theta, fin)
-    fsp_v, fsp_text = fsp_part(c)
-    act_v = activity_part(c)
-    cond_v = conditions_part(c, need.get("salary_min"), need.get("salary_max"), need.get("work_format"))
-    raw = {"stack": stack_v, "grade": grade_v, "strength": str_v, "fsp": fsp_v, "activity": act_v, "conditions": cond_v}
-    score = combine(raw, w)
-    parts = {k: round(v, 3) for k, v in raw.items()}
     # обоснование одной строкой
     bits = []
-    ns = need.get("stack") or []
-    if ns:
-        bits.append(f"технологии: подтверждено тестом {len(stack_d['confirmed'])}, заявлено без проверки {len(stack_d['declared'])}"
-                    + (f", не подтверждено тестом {len(stack_d['failed'])}" if stack_d["failed"] else "") + f" из {len(ns)}"
-                    + (f" (нет: {', '.join(skill_name(x) for x in stack_d['missing'][:3])})" if stack_d["missing"] else ""))
+    if nf["stack"]:
+        bits.append(f"технологии: подтверждено тестом {len(detail['confirmed'])}, заявлено без проверки {len(detail['declared'])}"
+                    + (f", не подтверждено тестом {len(detail['failed'])}" if detail["failed"] else "") + f" из {len(nf['stack'])}"
+                    + (f" (нет: {', '.join(skill_name(x) for x in detail['missing'][:3])})" if detail["missing"] else ""))
     if c.grade:
-        bits.append(f"грейд {GRADE_TITLE.get(c.grade, c.grade)} подтверждён тестом" + (f" ({str_text})" if theta is not None else "")
-                    + (f"; заявленный {GRADE_TITLE.get(c.claimed_grade, c.claimed_grade)} учтён как подсказка" if hint else ""))
+        days = feat["theta_days"]
+        bits.append(f"грейд {GRADE_TITLE.get(c.grade, c.grade)} подтверждён тестом"
+                    + (f" (θ = {theta:.2f}, {days} дн. назад)" if theta is not None and days is not None else "")
+                    + (f"; заявленный {GRADE_TITLE.get(c.claimed_grade, c.claimed_grade)} учтён как подсказка" if hint else "")
+                    + ("; заявленный грейд на два выше подтверждённого — доверие к непроверенным технологиям снижено" if inflated else ""))
     else:
         bits.append("грейд не подтверждён")
-    bits.append(fsp_text or "истории ФСП нет")
-    if act_v >= 1.0:
+    bits.append(fsp_text(c) or "истории ФСП нет")
+    if raw_parts["activity"] >= 1.0:
         bits.append("активен на этой неделе")
-    return {"score": round(score, 3), "parts": parts, "explanation": "; ".join(bits), "stack_detail": stack_d}
+    return {"score": round(score, 3), "raw_score": round(raw_score, 4), "parts": {k: round(v, 3) for k, v in raw_parts.items()},
+            "explanation": "; ".join(bits), "stack_detail": detail}
 
 
 def last_thetas(db: Session, candidate_ids: list[int]) -> dict[int, tuple]:
@@ -207,7 +156,7 @@ def candidate_pool(db: Session, filters: dict) -> list[Candidate]:
         want = set(filters["skills"])
         cands = [c for c in cands if want & {k.skill for k in c.skills}]
     if filters.get("fsp_only"):
-        cands = [c for c in cands if any(a.trust_level in ("source", "document") and a.status == "active" and not a.hidden for a in c.achievements)]
+        cands = [c for c in cands if any(a.trust_level in TRUSTED and a.status == "active" and not a.hidden for a in c.achievements)]
     if filters.get("salary_max") is not None:
         cands = [c for c in cands if c.salary_min is None or c.salary_min <= filters["salary_max"]]
     return cands
@@ -228,7 +177,7 @@ def build_selection(db: Session, need: dict, filters: dict, weights: dict | None
     for c in pool:
         sc = score_candidate(c, need, weights or {}, thetas.get(c.id))
         scored.append((c, sc))
-    scored.sort(key=lambda x: (-x[1]["score"], x[0].id))
+    scored.sort(key=lambda x: (-x[1]["raw_score"], x[0].id))
     cats: dict[tuple, list[float]] = {}
     for c, sc in scored:
         cats.setdefault((c.specialization_code, c.grade), []).append(sc["score"])

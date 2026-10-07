@@ -32,7 +32,11 @@ JUNIOR_MIDDLE_SHARE = 0.6
 
 
 def module_of(spec) -> str:
-    return spec.generate.__module__.rsplit(".", 1)[-1]
+    """Имя модуля банка; все модули пакета generated считаются одной группой «generated»."""
+    mod = spec.generate.__module__
+    if ".generated." in mod or mod.endswith(".generated"):
+        return "generated"
+    return mod.rsplit(".", 1)[-1]
 
 
 def generate(spec, seed: int) -> Instance:
@@ -64,7 +68,8 @@ def test_codes_unique_and_latin():
     for spec in SPECS:
         assert REGISTRY[spec.code] is spec, spec.code
         assert spec.code.isascii() and spec.code.islower(), f"код шаблона должен быть латиницей в нижнем регистре: {spec.code}"
-        assert spec.code.startswith(module_of(spec) + "_"), f"код {spec.code} должен начинаться с имени модуля"
+        prefix = "gen_" if module_of(spec) == "generated" else module_of(spec) + "_"
+        assert spec.code.startswith(prefix), f"код {spec.code} должен начинаться с {prefix!r}"
 
 
 @pytest.mark.parametrize("spec", SPECS, ids=lambda s: s.code)
@@ -76,7 +81,7 @@ def test_spec_metadata(spec):
     unknown = set(spec.technologies) - CODES
     assert not unknown, f"технологии вне каталога: {unknown}"
     assert spec.title and spec.competency
-    assert module_of(spec) in MIN_PER_MODULE
+    assert module_of(spec) in MIN_PER_MODULE or module_of(spec) == "generated"
     if module_of(spec) == "common":
         assert spec.specializations == [], "общий шаблон должен иметь пустой список специализаций"
     else:
@@ -168,6 +173,13 @@ def test_module_minimums():
     counts = Counter(module_of(s) for s in SPECS)
     for module, minimum in MIN_PER_MODULE.items():
         assert counts[module] >= minimum, f"{module}: {counts[module]} шаблонов, нужно не меньше {minimum}"
+
+
+def test_whole_bank_junior_middle_share():
+    """Сгенерированные шаблоны намеренно закрывают senior/lead; по банку в целом базовых уровней должно оставаться не меньше половины."""
+    grades = Counter(s.grade_level for s in SPECS)
+    share = (grades["junior"] + grades["middle"]) / len(SPECS)
+    assert share >= 0.5, f"junior+middle по всему банку = {share:.0%}"
 
 
 @pytest.mark.parametrize("module", sorted(MIN_PER_MODULE))

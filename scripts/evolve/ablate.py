@@ -31,18 +31,38 @@ EDITS = {
 }
 
 
+# для формулы захода 3 (g12c0): другой текст — другие фрагменты
+EDITS_V2 = {
+    "доверие по расхождению грейдов не учитывается (trust = 1)": [("    trust = min(max(trust, 0.45), 1.0)", "    trust = 1.0")],
+    "проваленная технология: 0,12 вместо −0,18": [("    failed_w = -0.18", "    failed_w = 0.12")],
+    "длинный стек не смягчается (miss_scale = 1)": [("        miss_scale = max(0.35, 1.0 - 0.09 * max(0, n_req - 4))", "        miss_scale = 1.0")],
+    "грейд: соседний выше требуемого = 0,60, как и ниже": [("                gv = 0.28", "                gv = 0.60")],
+    "грейд: только подтверждённый тестом (без подсказки)": [("    for g in (fg0, use_cg):", "    for g in (fg0,):")],
+    "без штрафа «нет ни одной подтверждённой технологии» (×0,80)": [("            stack_v *= 0.80", "            stack_v *= 1.0")],
+    "без мультипликативных ворот стек×грейд": [("    total = mandatory * (core + soft)", "    total = core + soft")],
+    "без среза ×0,75 при хорошем стеке и чужом грейде": [("        total *= 0.75", "        total *= 1.0")],
+    "без градуированной зарплаты (бинарно)": [("            parts_sum += 0.6 + 0.4 * ratio", "            parts_sum += 1.0"), ("            parts_sum += 0.35 * prox", "            parts_sum += 0.0")],
+    "сила профиля без давности θ (decay = 1)": [("    strength_v = base * decay", "    strength_v = base")],
+    "вес заявленной технологии не зависит от θ и доверия (0,4)": [("    untested_w = min(max(untested_w, 0.06), 0.72)", "    untested_w = 0.4")],
+    "веса предыдущей формулы 0,40/0,24/0,16/0,06/0,06/0,08": [('WEIGHTS = {"stack": 0.44, "grade": 0.24, "strength": 0.14, "fsp": 0.05, "activity": 0.05, "conditions": 0.08}',
+                                                              'WEIGHTS = {"stack": 0.40, "grade": 0.24, "strength": 0.16, "fsp": 0.06, "activity": 0.06, "conditions": 0.08}')],
+}
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "data", "evolve", "run", "best.py")
     src = open(path, encoding="utf-8").read()
     folder = os.path.join(ROOT, "data", "evolve")
-    sets = {"обучение 11,12": load_worlds(folder, seeds=[11, 12]), "отложенный 13": load_worlds(folder, seeds=[13]), "свежий 14": load_worlds(folder, seeds=[14])}
+    edits = EDITS_V2 if "trust = min(max(trust" in src else EDITS
+    sets = {"обучение": load_worlds(folder, seeds=[11, 12, 16, 17] if edits is EDITS_V2 else [11, 12]), "отложенный 13": load_worlds(folder, seeds=[13]),
+            "контроль 14": load_worlds(folder, seeds=[14]), "контроль 15": load_worlds(folder, seeds=[15])}
     base = {k: evaluate(load_score(path), w)["fitness"] for k, w in sets.items()}
     print(f"{'вариант':62} " + " ".join(f"{k:>14}" for k in sets))
     print(f"{'лучшая формула':62} " + " ".join(f"{base[k]:>14.4f}" for k in sets))
-    for name, edits in EDITS.items():
+    for name, edit_list in edits.items():
         s = src
         ok = True
-        for a, b in edits:
+        for a, b in edit_list:
             if s.count(a) != 1:
                 ok = False
                 break

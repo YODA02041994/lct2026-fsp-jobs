@@ -114,7 +114,7 @@ def candidate_card(c: Candidate, score: dict | None, unlocked: bool, db: Session
         "contacts_unlocked": unlocked,
     }
     if score:
-        card.update({"score": score["score"], "parts": score["parts"], "explanation": score["explanation"]})
+        card.update({"score": score["score"], "raw_score": score.get("raw_score"), "parts": score["parts"], "explanation": score["explanation"]})
     if unlocked:
         card["contacts"] = {"full_name": c.full_name, "phone": c.phone, "telegram": c.telegram, "email": c.user.email if c.user else ""}
     return card

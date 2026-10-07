@@ -49,7 +49,7 @@ export const InviteModal = {
 
 export const CandidateCard = {
   components: { InviteModal },
-  props: { card: Object, weights: Object, versionId: [Number, String], compact: Boolean, noInvite: Boolean, noScore: Boolean, scoreLabel: { type: String, default: 'оценка соответствия из 100' } },
+  props: { card: Object, weights: Object, versionId: [Number, String], compact: Boolean, noInvite: Boolean, noScore: Boolean, scoreLabel: { type: String, default: 'соответствие потребности, из 100' } },
   emits: ['invited'],
   setup(props, { emit }) {
     const inviting = ref(false);
@@ -85,7 +85,7 @@ export const CandidateCard = {
         </div>
       </div>
       <div>
-        <div class="score" v-if="!noScore && card.score !== undefined && card.score !== null">
+        <div class="score" v-if="!noScore && card.score !== undefined && card.score !== null" :title="card.raw_score !== undefined ? 'Калиброванная оценка: ' + score100 + ' означает, что по нашим данным подходят примерно ' + Math.round(score100 / 10) + ' из 10 кандидатов с таким профилем. Сырой итог формулы: ' + Math.round(card.raw_score * 100) : ''">
           <div class="score-val">{{ score100 }}</div>
           <div class="score-lbl">{{ scoreLabel }}</div>
         </div>

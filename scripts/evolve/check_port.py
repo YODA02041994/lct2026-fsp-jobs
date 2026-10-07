@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Сверка переноса: боевая score_candidate (backend) против эталона эволюции (best_2026-10-07.py) на сохранённом мире.
+"""Сверка установки: боевая score_candidate (backend) против эталона эволюции (аргумент — файл эталона) на сохранённом мире.
 
 Собирает из признаков мира объекты, похожие на ORM-кандидата, и сравнивает итоги с точностью до множителя шкалы.
-    cd backend && ../.venv/bin/python ../scripts/evolve/check_port.py
+    cd backend && ../.venv/bin/python ../scripts/evolve/check_port.py ../scripts/evolve/<эталон>.py
 """
 from __future__ import annotations
 import os
@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.join(ROOT, "backend"))
 os.environ.setdefault("FSP_DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("FSP_SECRET_KEY", "check")
 from fitness_matching import load_worlds, load_score  # noqa: E402
-from app.services.matching import score_candidate, BONUS_FULL_MATCH  # noqa: E402
+from app.services.matching import score_candidate  # noqa: E402
 
 LEVEL_TITLE = {"A1": "участие", "A2": "финал", "A3": "призёр", "A4": "победитель", "A5": "чемпион"}
 
@@ -32,7 +32,8 @@ def to_obj(f: dict):
 
 
 def main():
-    ref = load_score(os.path.join(HERE, "best_2026-10-07.py"))
+    ref_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "best_2026-10-07.py")
+    ref = load_score(ref_path)
     worlds = load_worlds(os.path.join(ROOT, "data", "evolve"), seeds=[14])
     now = datetime.now(timezone.utc)
     worst, n, order_mismatch = 0.0, 0, 0
@@ -43,8 +44,8 @@ def main():
             prod, et = [], []
             for f in w["candidates"]:
                 lt = (f["theta"], now - timedelta(days=f["theta_days"])) if f["theta"] is not None else None
-                p = score_candidate(to_obj(f), nd, {}, lt)["score"]
-                e = round(ref(f, need)[0] / BONUS_FULL_MATCH, 3)       # та же шкала и то же округление, что в боевом коде
+                p = score_candidate(to_obj(f), nd, {}, lt)["raw_score"]
+                e = round(ref(f, need)[0], 4)                           # сырой итог: то же округление, что в боевом коде
                 worst = max(worst, abs(p - e)); n += 1
                 prod.append((-p, f["id"])); et.append((-e, f["id"]))
             if [x[1] for x in sorted(prod)[:10]] != [x[1] for x in sorted(et)[:10]]:

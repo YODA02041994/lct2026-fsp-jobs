@@ -27,7 +27,7 @@ def build(candidates: int, seed: int, honesty: str) -> dict:
     from app.seed import ensure_catalog, seed_demo
     from app import synth
     from app.models import Candidate, TestSession
-    from app.services.matching import last_thetas, LEVEL_SCORE, SPEC_DISCIPLINE
+    from app.services.matching import last_thetas, candidate_features
     from sqlalchemy import select
     init_db(); ensure_catalog()
     seed_demo(n_candidates=candidates, rng_seed=seed, honesty=honesty)
@@ -47,16 +47,8 @@ def build(candidates: int, seed: int, honesty: str) -> dict:
             m = re.match(r"cand(\d+)@", c.user.email)
             t = truth[int(m.group(1)) - 1] if m else next(x for x in truth.values() if x.full_name == c.full_name)
             th = thetas.get(c.id)
-            acts = [a for a in c.achievements if not a.hidden and a.status == "active" and a.trust_level in ("source", "document")]
-            feat = {
-                "id": c.id, "spec": c.specialization_code, "grade": c.grade, "claimed_grade": c.claimed_grade,
-                "skills": {k.skill: {"confirmed": k.confirmed_by_test, "tested": k.test_score is not None, "score": k.test_score} for k in c.skills},
-                "theta": th[0] if th else None, "theta_days": (now - th[1].replace(tzinfo=timezone.utc)).days if th and th[1] else None,
-                "fsp": [{"level": a.level_code, "discipline": a.discipline} for a in acts],
-                "active_days": (now - c.last_active_at.replace(tzinfo=timezone.utc)).days if c.last_active_at else 999,
-                "salary_min": c.salary_min, "salary_max": c.salary_max, "work_format": c.work_format,
-                "truth": {"grade": t.true_grade, "theta": t.theta, "stack": t.true_stack, "fsp_rank": t.fsp["rank"] if t.fsp else None},
-            }
+            feat = candidate_features(c, th, now)
+            feat["truth"] = {"grade": t.true_grade, "theta": t.theta, "stack": t.true_stack, "fsp_rank": t.fsp["rank"] if t.fsp else None}
             out["candidates"].append(feat)
             cmap[c.id] = t
         for n in needs:
