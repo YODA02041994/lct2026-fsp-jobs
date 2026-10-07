@@ -49,13 +49,28 @@ EDITS_V2 = {
 }
 
 
+# для итоговой формулы best_2026-10-07c (заход 5 + упрощение)
+EDITS_V3 = {
+    "без зарплатного множителя и среза (зарплата только в «условиях»)": [("    if salary_fit is not None:\n        total *= (0.40 + 0.72 * salary_fit)\n", ""),
+                                                                         ("            and cand[\"salary_min\"] > need[\"salary_max\"]):\n        total *= 0.55\n", "            and cand[\"salary_min\"] > need[\"salary_max\"]):\n        total *= 1.0\n")],
+    "без ступенек покрытия стека в итоге": [("        if coverage >= 0.9:\n            total *= 1.08\n        elif coverage >= 0.75:\n            total *= 1.03\n        elif coverage <= 0.4:\n            total *= 0.78\n        elif coverage <= 0.6:\n            total *= 0.90\n", "")],
+    "без штрафов за недостающие технологии": [("        if n_missing >= 3:\n            total *= 0.80\n        elif n_missing >= 2:\n            total *= 0.90\n", ""),
+                                              ("        if n_missing >= 2:\n            stack_v *= max(0.55, 1.0 - 0.10 * (n_missing - 1))\n        if n_missing >= 4:\n            stack_v *= 0.85\n", "")],
+    "заявленная технология без нижнего порога 0,55": [("                v = max(untested_w, 0.55)", "                v = untested_w")],
+    "проваленная по 1–2 заданиям — отрицательный вклад (−0,18), как в заходе 3": [("    failed_w = 0.3", "    failed_w = -0.18")],
+    "грейд: только подтверждённый тестом (без подсказки)": [("    for g in (fg0, use_cg):", "    for g in (fg0,):")],
+    "грейд: соседний выше требуемого = 0,60, как и ниже": [("                gv = 0.28", "                gv = 0.60")],
+    "без мультипликативных ворот стек×грейд": [("    total = mandatory * (core + soft)", "    total = core + soft")],
+}
+
+
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "data", "evolve", "run", "best.py")
     src = open(path, encoding="utf-8").read()
-    folder = os.path.join(ROOT, "data", "evolve")
-    edits = EDITS_V2 if "trust = min(max(trust" in src else EDITS
-    sets = {"обучение": load_worlds(folder, seeds=[11, 12, 16, 17] if edits is EDITS_V2 else [11, 12]), "отложенный 13": load_worlds(folder, seeds=[13]),
-            "контроль 14": load_worlds(folder, seeds=[14]), "контроль 15": load_worlds(folder, seeds=[15])}
+    folder = os.environ.get("ABLATE_WORLDS") or os.path.join(ROOT, "data", "evolve")
+    edits = EDITS_V3 if "salary_fit" in src else EDITS_V2 if "trust = min(max(trust" in src else EDITS
+    sets = {"обучение": load_worlds(folder, seeds=[11, 12, 16, 17] if edits is not EDITS else [11, 12]), "отложенный 13": load_worlds(folder, seeds=[13]),
+            "контроль 14": load_worlds(folder, seeds=[14]), "контроль 15": load_worlds(folder, seeds=[15]), "контроль 18": load_worlds(folder, seeds=[18])}
     base = {k: evaluate(load_score(path), w)["fitness"] for k, w in sets.items()}
     print(f"{'вариант':62} " + " ".join(f"{k:>14}" for k in sets))
     print(f"{'лучшая формула':62} " + " ".join(f"{base[k]:>14.4f}" for k in sets))

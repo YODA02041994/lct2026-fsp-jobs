@@ -23,15 +23,38 @@ def grade_from_theta(theta: float) -> str:
     return result
 
 
-def eap(responses: list[tuple[float, bool]], prior_sd: float = 1.0) -> tuple[float, float]:
-    """responses: [(сложность b, верно ли)] → (θ, стандартное отклонение)."""
+# Априор умения — распределение θ в популяции кандидатов (эмпирический Байес, стандартная практика IRT).
+# На старте выводится из долей заявленных грейдов и центров шкалы сложности (docs/08, раздел 3), затем переоценивается
+# по накопленным θ̂. Значение задаётся настройками FSP_TEST_PRIOR_MEAN / FSP_TEST_PRIOR_SD.
+from ...config import get_settings as _gs  # noqa: E402
+PRIOR = {"mean": _gs().test_prior_mean, "sd": _gs().test_prior_sd}
+
+
+def guess_rate(fmt: str, n_options: int | None) -> float:
+    """Вероятность угадать ответ, не зная его: выбор одного из n — 1/n; несколько из n — 1/(2n); точный ответ — 0.
+    Используется и в оценке θ (модель ответа с угадыванием), и в симуляции кандидатов — чтобы они не расходились."""
+    n = max(int(n_options or 0), 2)
+    if fmt == "choice":
+        return 1.0 / n
+    if fmt == "multichoice":
+        return 1.0 / (2 * n)
+    return 0.0
+
+
+def eap(responses: list[tuple], prior_sd: float | None = None, prior_mean: float | None = None) -> tuple[float, float]:
+    """responses: [(сложность b, верно ли[, вероятность угадывания g])] → (θ, стандартное отклонение).
+    Модель ответа: P(верно) = g + (1 − g)·σ(θ − b); без g — Раш. Априор — нормальный, по умолчанию PRIOR."""
+    mu = PRIOR["mean"] if prior_mean is None else prior_mean
+    sd0 = PRIOR["sd"] if prior_sd is None else prior_sd
     if not responses:
-        return 0.0, prior_sd
+        return mu, sd0
     weights = []
     for t in _GRID:
-        logp = -0.5 * (t / prior_sd) ** 2
-        for b, ok in responses:
-            p = 1.0 / (1.0 + math.exp(-(t - b)))
+        logp = -0.5 * ((t - mu) / sd0) ** 2
+        for r in responses:
+            b, ok = r[0], r[1]
+            g = r[2] if len(r) > 2 else 0.0
+            p = g + (1.0 - g) / (1.0 + math.exp(-(t - b)))
             p = min(max(p, 1e-9), 1 - 1e-9)
             logp += math.log(p) if ok else math.log(1 - p)
         weights.append(logp)

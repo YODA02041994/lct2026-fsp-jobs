@@ -16,6 +16,7 @@ from collections import Counter, defaultdict
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "backend"))
+from app.services.testing import engine as _engine  # noqa: E402
 from app.services.testing.engine import (REGISTRY, load_all, pick_templates, make_item, eap, grade_from_theta, next_level_after_block,  # noqa: E402
                                          decide, GRADES, GRADE_THRESHOLDS)
 from app import synth  # noqa: E402
@@ -24,44 +25,15 @@ from app.catalog import SPECIALIZATIONS  # noqa: E402
 SPEC_BANK = {c: True for c, _, _, hb, _ in SPECIALIZATIONS if hb}     # специализации со своим банком — из каталога
 
 
-def p_correct(theta: float, code: str, rng: random.Random) -> bool:
-    t = REGISTRY[code]
-    p = 1 / (1 + math.exp(-(theta - t.difficulty)))
-    if t.fmt in ("choice", "multichoice"):
-        inst = t.generate(random.Random(rng.randrange(1, 10**9)))
-        n = len(inst.options or []) or 5
-        g = 1 / n if t.fmt == "choice" else 1 / (n * 2)
-        p = g + (1 - g) * p
-    return rng.random() < p
+from app.services.testing import simulate as _sim  # noqa: E402
 
 
 def run_session(theta: float, spec: str, claimed: str, skills: list[str], rng: random.Random, block_size: int, blocks: int,
-                leaked: set[tuple[str, int]] | None = None, parametrized: bool = True):
-    """→ (θ-оценка, sd, грейд, решение, список (код, зерно, верно)). leaked — экземпляры (код, зерно), ответы на которые кандидат знает."""
-    level = claimed
-    used: set[str] = set()
-    responses: list[tuple[float, bool]] = []
-    items = []
-    for b in range(1, blocks + 1):
-        codes = pick_templates(spec, level, skills, block_size, rng, exclude=used, has_bank=SPEC_BANK.get(spec, False))
-        used |= set(codes)
-        correct = 0
-        for code in codes:
-            seed = 1 if not parametrized else rng.randrange(1, 2**31)      # фиксированный набор = у всех одно зерно
-            if leaked is not None and (code, seed) in leaked:
-                ok = True
-            else:
-                ok = p_correct(theta, code, rng)
-            correct += int(ok)
-            responses.append((REGISTRY[code].difficulty, ok))
-            items.append((code, seed, ok))
-        out = next_level_after_block(level, correct, len(codes), b, blocks)
-        if out.next_level is None:
-            break
-        level = out.next_level
-    th, sd = eap(responses)
-    grade, decision = decide(th, sd, claimed)
-    return th, sd, grade, decision, items
+                leaked: set[tuple[str, int]] | None = None, parametrized: bool = True, true_stack: list[str] | None = None):
+    """→ (θ-оценка, sd, грейд, решение, список (код, зерно, верно)) — общий симулятор app/services/testing/simulate.py."""
+    r = _sim.run_session(theta, spec, claimed, skills, rng, block_size, blocks, has_bank=SPEC_BANK.get(spec, False),
+                         true_stack=true_stack, leaked=leaked, parametrized=parametrized)
+    return r["theta"], r["sd"], r["grade"], r["decision"], r["items"]
 
 
 def auc(pos: list[float], neg: list[float]) -> float:
@@ -77,19 +49,26 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=5)
     ap.add_argument("--block-size", type=int, default=4)
     ap.add_argument("--blocks", type=int, default=2)
+    ap.add_argument("--prior-mean", type=float, default=None, help="среднее априора θ (по умолчанию — из настроек движка)")
+    ap.add_argument("--prior-sd", type=float, default=None, help="разброс априора θ")
     args = ap.parse_args()
+    if args.prior_mean is not None:
+        _engine.PRIOR["mean"] = args.prior_mean
+    if args.prior_sd is not None:
+        _engine.PRIOR["sd"] = args.prior_sd
     load_all()
     rng = random.Random(args.seed)
     events = synth.load_events()
     cands = [c for c in synth.make_candidates(args.n, rng, events) if c.specialization in SPEC_BANK]
+    print(f"Априор θ: N({_engine.PRIOR['mean']:+.2f}, {_engine.PRIOR['sd']:.2f})")
     print(f"Шаблонов в банке: {len(REGISTRY)}; кандидатов со своим банком: {len(cands)}; блоков {args.blocks} по {args.block_size}\n")
 
     # 1. соответствие истинному грейду и согласованность (два прохода)
     conf = Counter(); agree = 0; thetas_by_grade = defaultdict(list); est_err = []
     decisions = Counter(); claimed_ok = 0
     for c in cands:
-        th1, sd1, g1, d1, _ = run_session(c.theta, c.specialization, c.claimed_grade, c.declared_stack, rng, args.block_size, args.blocks)
-        th2, sd2, g2, d2, _ = run_session(c.theta, c.specialization, c.claimed_grade, c.declared_stack, rng, args.block_size, args.blocks)
+        th1, sd1, g1, d1, _ = run_session(c.theta, c.specialization, c.claimed_grade, c.declared_stack, rng, args.block_size, args.blocks, true_stack=c.true_stack)
+        th2, sd2, g2, d2, _ = run_session(c.theta, c.specialization, c.claimed_grade, c.declared_stack, rng, args.block_size, args.blocks, true_stack=c.true_stack)
         measured = grade_from_theta(th1)
         conf[(c.true_grade, measured)] += 1
         agree += int(grade_from_theta(th1) == grade_from_theta(th2))
@@ -133,7 +112,7 @@ def main() -> None:
     print("\nШаблоны с самой низкой связью «верно → итоговое θ̂» (точечно-бисериальная корреляция), стоит пересмотреть:")
     per: dict[str, list[tuple[int, float]]] = defaultdict(list)
     for c in cands:
-        th, _, _, _, items = run_session(c.theta, c.specialization, c.claimed_grade, c.declared_stack, rng, args.block_size, args.blocks)
+        th, _, _, _, items = run_session(c.theta, c.specialization, c.claimed_grade, c.declared_stack, rng, args.block_size, args.blocks, true_stack=c.true_stack)
         for code, _, ok in items:
             per[code].append((int(ok), th))
     rows = []

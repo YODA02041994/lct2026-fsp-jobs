@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     test_block_size: int = 5
     test_blocks: int = 2
     test_item_seconds: int = 90
+    test_prior_mean: float = -0.5      # априор θ: популяция кандидатов (эмпирический Байес, docs/08 §3); переоценивается по накопленным θ̂
+    test_prior_sd: float = 1.05
     grade_change_cooldown_days: int = 90
 
     # ФСП ID (OIDC). Пусто — встроенный издатель-заглушка

@@ -17,7 +17,7 @@ GRADES = [
     ("lead", "Lead", "руководит разработкой и командой"),
 ]
 WORK_FORMATS = [("office", "Офис"), ("remote", "Удалённо"), ("hybrid", "Гибрид")]
-DEFAULT_WEIGHTS = {'stack': 0.44, 'grade': 0.24, 'strength': 0.14, 'fsp': 0.05, 'activity': 0.05, 'conditions': 0.08}   # веса формулы подбора (best_2026-10-07b), ставит install_formula.py
+DEFAULT_WEIGHTS = {'stack': 0.5, 'grade': 0.22, 'strength': 0.12, 'fsp': 0.04, 'activity': 0.04, 'conditions': 0.08}   # веса формулы подбора (best_2026-10-07d), ставит install_formula.py
 GRADE_TITLE = {c: t for c, t, _ in GRADES}
 SPEC_TITLE = {c: n for c, n, *_ in SPECIALIZATIONS}
 

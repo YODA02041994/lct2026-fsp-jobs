@@ -93,7 +93,8 @@ def make_candidates(n: int, rng: random.Random, events: list[dict], honesty: str
     'inflated' — сильное приукрашивание (рынок, где резюме не проверяют)."""
     H = {"honest": dict(keep=0.9, extra_p=0.15, extra_n=(1, 1), over=0.08, under=0.05),
          "typical": dict(keep=0.8, extra_p=0.55, extra_n=(1, 3), over=0.25, under=0.05),
-         "inflated": dict(keep=0.75, extra_p=0.8, extra_n=(2, 4), over=0.4, under=0.03)}[honesty]
+         "inflated": dict(keep=0.75, extra_p=0.8, extra_n=(2, 4), over=0.4, under=0.03),
+         "extreme": dict(keep=0.7, extra_p=0.95, extra_n=(3, 5), over=0.6, under=0.02)}[honesty]   # extreme — только для проверки устойчивости
     out = []
     used = set()
     for i in range(n):
@@ -211,14 +212,18 @@ def make_needs(rng: random.Random) -> list[SynthNeed]:
     return out
 
 
+REL_OVERLAP = 0.5        # правило релевантности: доля требуемого стека в истинном стеке (варианты генератора — scripts/evolve/features.py --variant)
+REL_GRADE_SPAN = 1       # допустимая разница истинного грейда и грейда потребности
+
+
 def relevant(need: SynthNeed, c: SynthCandidate) -> bool:
     """Истинная релевантность пары по скрытым данным (docs/07, раздел 5)."""
     if c.specialization != need.specialization and not (need.specialization == "fullstack" and c.specialization in ("backend", "frontend")):
         return False
-    if abs(GRADES.index(c.true_grade) - GRADES.index(need.grade)) > 1:
+    if abs(GRADES.index(c.true_grade) - GRADES.index(need.grade)) > REL_GRADE_SPAN:
         return False
     if need.stack:
         overlap = len(set(need.stack) & set(c.true_stack)) / len(need.stack)
-        if overlap < 0.5:
+        if overlap < REL_OVERLAP:
             return False
     return c.salary_min <= need.salary_max

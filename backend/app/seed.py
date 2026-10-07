@@ -53,7 +53,9 @@ def _user(db, email: str, role: str) -> User:
     return u
 
 
-def seed_demo(n_candidates: int = 120, rng_seed: int = 7, honesty: str = "typical") -> dict:
+def seed_demo(n_candidates: int = 120, rng_seed: int = 7, honesty: str = "typical", realistic_test: bool = True) -> dict:
+    """realistic_test=True — результаты теста получаются прохождением настоящего движка (simulate.run_session);
+    False — прежняя идеализация (θ̂ = θ + шум 0,35, технологии подтверждаются без ошибок), оставлена для сравнения."""
     synth.ONLY_PAST_EVENTS = True       # в демо-данных достижения только по прошедшим событиям календаря
     rng = random.Random(rng_seed)
     events = synth.load_events()
@@ -87,9 +89,18 @@ def seed_demo(n_candidates: int = 120, rng_seed: int = 7, honesty: str = "typica
             c.visible_to_employers = True
             # тест: наблюдаемое θ = истинное + шум измерения; грейд — по шкале docs/08
             from .services.testing.engine import grade_from_theta, decide
-            theta_obs = sc.theta + rng.gauss(0, 0.35)
-            sd = rng.uniform(0.35, 0.55)
-            result_grade, decision = decide(theta_obs, sd, sc.claimed_grade)
+            if realistic_test:
+                from .services.testing import simulate
+                from .catalog import SPECIALIZATIONS
+                from .config import get_settings
+                _st = get_settings()
+                sim = simulate.run_session(sc.theta, sc.specialization, sc.claimed_grade, sc.declared_stack, rng, _st.test_block_size, _st.test_blocks,
+                                           has_bank={c_: hb for c_, _, _, hb, _ in SPECIALIZATIONS}.get(sc.specialization, False), true_stack=sc.true_stack)
+                theta_obs, sd, result_grade, decision = sim["theta"], sim["sd"], sim["grade"], sim["decision"]
+            else:
+                theta_obs = sc.theta + rng.gauss(0, 0.35)
+                sd = rng.uniform(0.35, 0.55)
+                result_grade, decision = decide(theta_obs, sd, sc.claimed_grade)
             final_grade = result_grade if decision in ("confirmed", "suggest_lower") else sc.claimed_grade
             if decision == "suggest_lower" and rng.random() < 0.3:
                 final_grade = sc.claimed_grade          # часть кандидатов не согласилась понижаться: грейд остаётся заявленным, но без подтверждения
@@ -105,9 +116,13 @@ def seed_demo(n_candidates: int = 120, rng_seed: int = 7, honesty: str = "typica
             db.add(GradeHistory(candidate_id=c.id, session_id=s.id, old_grade=None, new_grade=final_grade, changed_at=finished))
             # навыки: заявленные; подтверждены тестом те, что есть в истинном стеке (с вероятностью) и были проверены
             for sk in sc.declared_stack:
-                truly = sk in sc.true_stack
-                tested = rng.random() < 0.85           # блоки теста покрывают заявленные технологии (docs/08)
-                score = round(rng.uniform(0.6, 1.0), 2) if truly and tested else round(rng.uniform(0.0, 0.45), 2) if tested else None
+                if realistic_test:                         # как в бою: доля верных по заданиям этой технологии, если они были
+                    ct = sim["tech"].get(sk)
+                    score = round(ct[0] / ct[1], 2) if ct and ct[1] else None
+                else:
+                    truly = sk in sc.true_stack
+                    tested = rng.random() < 0.85
+                    score = round(rng.uniform(0.6, 1.0), 2) if truly and tested else round(rng.uniform(0.0, 0.45), 2) if tested else None
                 db.add(CandidateSkill(candidate_id=c.id, skill=sk, source="profile", confirmed_by_test=bool(score is not None and score >= 0.5), test_score=score))
             # ФСП
             if sc.fsp:

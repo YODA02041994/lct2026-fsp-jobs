@@ -11,7 +11,7 @@ from ..deps import current_candidate
 from ..models import Candidate, TestSession, TestItem, Template, CandidateSkill, GradeHistory, GRADES as GRADE_CODES
 from ..schemas import SessionStart, AnswerIn
 from ..services.skills_catalog import normalize_skill
-from ..services.testing.engine import pick_templates, make_item, grade_item, eap, next_level_after_block, decide, REGISTRY, load_all, technology_summary
+from ..services.testing.engine import pick_templates, make_item, grade_item, eap, next_level_after_block, decide, guess_rate, REGISTRY, load_all, technology_summary
 from ..services.views import session_view, candidate_profile, grade_change_available_at
 from ..services.audit import log
 
@@ -127,7 +127,9 @@ def answer(sid: int, data: AnswerIn, c: Candidate = Depends(current_candidate), 
 
 
 def _finish(db: Session, s: TestSession, c: Candidate) -> None:
-    responses = [(REGISTRY[it.template_code].difficulty, bool(it.correct)) for it in s.items if it.candidate_answer is not None]
+    responses = [(REGISTRY[it.template_code].difficulty, bool(it.correct),
+                  guess_rate(REGISTRY[it.template_code].fmt, len((it.payload or {}).get("options") or [])))
+                 for it in s.items if it.candidate_answer is not None]
     theta, sd = eap(responses)
     s.theta, s.theta_sd = theta, sd
     s.result_grade, s.decision = decide(theta, sd, s.claimed_grade)

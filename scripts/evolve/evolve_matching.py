@@ -43,6 +43,11 @@ IDEAS = [
     "ворота стек×грейд: попробуй другие коэффициенты (например 0,35+0,65·stack) или мягкую степень вместо произведения",
     "учитывай число подтверждённых тестом технологий в абсолюте (3 подтверждённые из 8 — сильнее, чем 1 из 2)",
     "проваленная тестом технология должна штрафовать сильнее, чем просто отсутствие",
+    "подсказка бустинга: самый важный признак — пересекаются ли зарплатные ожидания кандидата с вилкой работодателя; сделай это сильнее",
+    "подсказка бустинга: второй по важности — доля требуемого стека, которая есть у кандидата (заявлена или подтверждена), и число недостающих технологий",
+    "подсказка бустинга: θ кандидата важнее, чем θ относительно грейда потребности",
+    "тест проверяет технологию одним-двумя заданиями — подтверждение и провал шумные; не доверяй им слишком сильно",
+    "убери компонент, который, по-твоему, не влияет на качество (меньше правил — лучше объяснимость)",
 ]
 SYSTEM = """Ты улучшаешь функцию ранжирования кандидатов для платформы подбора ИТ-специалистов.
 Контракт: функция score(cand, need) -> (total: float, parts: dict). Доступны имена GRADES (список грейдов junior<middle<senior<lead),
@@ -61,7 +66,7 @@ def block(src: str) -> str:
     return src[i: j + len("# EVOLVE-BLOCK-END")]
 
 
-def validate_and_eval(code: str, worlds_train, path: str, train_seeds=(11, 12)) -> dict | None:
+def validate_and_eval(code: str, worlds_train, path: str, train_seeds=(11, 12), worlds_dir: str | None = None) -> dict | None:
     if FORBIDDEN.search(code) or "def score(" not in code:
         return None
     header = '"""Кандидат формулы (создан эволюцией)."""\n'
@@ -71,7 +76,7 @@ def validate_and_eval(code: str, worlds_train, path: str, train_seeds=(11, 12)) 
         out = subprocess.run([sys.executable, "-c", f"""
 import sys, json; sys.path.insert(0, {HERE!r})
 from fitness_matching import load_worlds, load_score, evaluate
-w = load_worlds({os.path.join(ROOT, 'data', 'evolve')!r}, seeds={train_seeds!r})
+w = load_worlds({(worlds_dir or os.path.join(ROOT, 'data', 'evolve'))!r}, seeds={list(train_seeds)!r})
 print(json.dumps(evaluate(load_score({path!r}), w)))
 """], capture_output=True, text=True, timeout=120)
         if out.returncode != 0:
@@ -89,11 +94,13 @@ def main():
     ap.add_argument("--start", default=None, help="файл с EVOLVE-BLOCK, с которого начинать (по умолчанию score_baseline.py)")
     ap.add_argument("--train-seeds", default="11,12", help="зёрна обучающих миров")
     ap.add_argument("--hold-seeds", default="13", help="зёрна отложенных миров (только для контроля, не для отбора)")
+    ap.add_argument("--worlds", default=os.path.join(ROOT, "data", "evolve"), help="папка с мирами")
+    ap.add_argument("--min-gain", type=float, default=0.0, help="порог шума (RRSI): потомок входит в популяцию, только если лучше родителя на обучении хотя бы на столько")
     ap.add_argument("--patience", type=int, default=0, help="остановиться, если лучший по обучению не улучшался столько поколений (0 — не останавливаться)")
     args = ap.parse_args()
     start_path = args.start or os.path.join(HERE, "score_baseline.py")
     os.makedirs(args.out, exist_ok=True)
-    worlds_dir = os.path.join(ROOT, "data", "evolve")
+    worlds_dir = args.worlds
     train_seeds = [int(x) for x in args.train_seeds.split(",")]; hold_seeds = [int(x) for x in args.hold_seeds.split(",")]
     train = load_worlds(worlds_dir, seeds=train_seeds); hold = load_worlds(worlds_dir, seeds=hold_seeds)
     print(f"обучение: зёрна {train_seeds} ({len(train)} миров); отложенный: {hold_seeds} ({len(hold)} миров)")
@@ -127,9 +134,12 @@ def main():
                 code = block(code)
             counter += 1
             cid = f"g{g}c{ci}"
-            fit = validate_and_eval(code, train, os.path.join(args.out, f"cand_{cid}.py"), train_seeds)
+            fit = validate_and_eval(code, train, os.path.join(args.out, f"cand_{cid}.py"), train_seeds, worlds_dir)
             rec = {"id": cid, "parent": parent["id"], "ideas": ideas, "ok": fit is not None, "fitness": fit["fitness"] if fit else None}
             log.write(json.dumps(rec, ensure_ascii=False) + "\n"); log.flush()
+            if fit and fit["fitness"] < parent["fit"]["fitness"] + args.min_gain:
+                print(f"  {cid} ← {parent['id']}: train {fit['fitness']:.4f} — прирост меньше порога шума {args.min_gain}, не принят")
+                continue
             if fit:
                 hold_fit = evaluate(load_score(os.path.join(args.out, f"cand_{cid}.py")), hold)
                 children.append({"id": cid, "code": code, "fit": fit, "hold": hold_fit})

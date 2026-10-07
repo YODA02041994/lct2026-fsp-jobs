@@ -24,7 +24,7 @@ from .skills_catalog import skill_name
 from . import matching_formula as formula
 from .matching_formula import LEVEL_SCORE, SPEC_DISCIPLINE  # noqa: F401  (нужны features.py и проверкам)
 
-CALIBRATION = {"a": 9.6380, "b": -3.4724}     # p = σ(a·raw + b); calibrate.py на мирах 11,12,13,16,17, проверено на 14 и 15 (docs/09)
+CALIBRATION = {"a": 7.1956, "b": -2.4124}     # p = σ(a·raw + b); calibrate.py на реалистичных мирах 11,12,13,16,17, проверено на 14,15,18 (docs/09)
 TRUSTED = ("source", "document")
 
 
@@ -134,6 +134,11 @@ def score_candidate(c: Candidate, need: dict, weights: dict, last_theta: tuple |
     else:
         bits.append("грейд не подтверждён")
     bits.append(fsp_text(c) or "истории ФСП нет")
+    if nf["salary_max"] is not None and c.salary_min is not None:
+        if c.salary_min > nf["salary_max"]:
+            bits.append(f"ожидания кандидата (от {c.salary_min // 1000} тыс. ₽) выше вилки — приглашение могут отклонить")
+        elif nf["salary_min"] is not None:
+            bits.append("зарплатные ожидания в вилке")
     if raw_parts["activity"] >= 1.0:
         bits.append("активен на этой неделе")
     return {"score": round(score, 3), "raw_score": round(raw_score, 4), "parts": {k: round(v, 3) for k, v in raw_parts.items()},

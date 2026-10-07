@@ -38,3 +38,6 @@ backend/app/services/testing/bank/generated/_run_log.jsonl
 
 # сборка документации (HTML, временные файлы); PDF и так вне git
 docs/build/
+
+# миры и прогоны эволюции (большие JSON) — вне git
+data/
