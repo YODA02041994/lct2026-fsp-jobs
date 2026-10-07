@@ -171,3 +171,12 @@ def test_fsp_mock_form_action_resolves_like_browser(client):
     action = re.search(r'<form method="post" action="([^"]+)"', page.text).group(1)
     target = urlparse(urljoin("http://testserver" + page_path, action)).path
     assert target == "/api/v1/fsp/mock/authorize", target
+
+
+def test_decide_never_raises_without_confidence():
+    """Заявил Middle, θ̂ в зоне Senior, но θ̂ − sd ниже порога Senior: подтверждается Middle, а не Senior."""
+    from app.services.testing.engine import decide, GRADE_THRESHOLDS
+    th = GRADE_THRESHOLDS["senior"] + 0.3
+    assert decide(th, 0.6, "middle") == ("middle", "confirmed")
+    assert decide(GRADE_THRESHOLDS["senior"] + 0.9, 0.5, "middle") == ("senior", "suggest_higher")
+    assert decide(GRADE_THRESHOLDS["middle"] - 0.5, 0.5, "middle")[1] == "suggest_lower"

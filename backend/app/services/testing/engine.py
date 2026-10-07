@@ -158,7 +158,9 @@ def decide(theta: float, sd: float, claimed: str) -> tuple[str, str]:
         return GRADES[ci + 1], "suggest_higher"      # за один тест категория повышается не более чем на грейд; θ показывается отдельно
     if mi < ci:
         return measured, "suggest_lower"
-    return claimed if mi == ci else measured, "confirmed"
+    # θ̂ в зоне заявленного грейда или выше, но без уверенного запаса — подтверждается заявленный (docs/08, раздел 4);
+    # раньше здесь возвращался измеренный грейд, и кандидата молча повышали без уверенности
+    return claimed, "confirmed"
 
 
 def technology_summary(items: list[tuple[str, bool | None]]) -> list[dict]:

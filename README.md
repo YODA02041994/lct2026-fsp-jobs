@@ -17,6 +17,7 @@
 | Прототип | https://docsemenov.ru/fsp/ |
 | API (OpenAPI, интерактивно) | https://docsemenov.ru/fsp/api/docs |
 | Документация к сдаче (PDF) | https://docsemenov.ru/fsp/files/Документация_Карьера_ФСП.pdf |
+| Демо-видео сквозного сценария (2 мин) | https://docsemenov.ru/fsp/files/Карьера_ФСП_демо.mp4 |
 | Учётные записи для проверки | кандидат с историей ФСП `candidate.demo@fsp-demo.ru`, без истории — `candidate2.demo@fsp-demo.ru`, работодатель `employer.demo@fsp-demo.ru`; пароль у всех `demo12345` (подсказка есть и на экране входа) |
 
 Все кандидаты и компании в демонстрационных данных выдуманы (`backend/app/synth.py`).

@@ -33,6 +33,7 @@ FONT_BOLD = ROOT / "backend" / "app" / "assets" / "Montserrat-Bold.ttf"
 FONT_REG = ROOT / "backend" / "app" / "assets" / "Montserrat-Regular.ttf"
 FFMPEG = shutil.which("ffmpeg") or "/opt/anaconda3/bin/ffmpeg"
 W, H = 1440, 900
+MAX_CAPTION_W = 920      # подпись слева; справа внизу остаются видны уведомления приложения
 
 NEED_TITLE = "Бэкенд-разработчик в команду платежей"
 NEED_TEXT = ("Ищем middle бэкенд-разработчика в команду платежей: Python, FastAPI, PostgreSQL, Docker, Kafka. "
@@ -116,14 +117,22 @@ class Recorder(ss.Chrome):
               f" const r = el.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }})()")
         return self.eval(js)
 
-    def click(self, selector: str, text: str | None = None, nth: int = 0, wait: float = 0.6) -> None:
-        pt = self.locate(selector, text, nth)
-        if not pt:
-            raise RuntimeError(f"не найден элемент {selector!r} с текстом {text!r}")
-        self.pump(0.25)
-        x, y = pt
-        for t in ("mouseMoved", "mousePressed", "mouseReleased"):
-            self.send("Input.dispatchMouseEvent", {"type": t, "x": x, "y": y, "button": "left", "clickCount": 1})
+    def click(self, selector: str, text: str | None = None, nth: int = 0, wait: float = 0.6, exact: bool = False) -> None:
+        if not exact:
+            pt = self.locate(selector, text, nth)
+            if not pt:
+                raise RuntimeError(f"не найден элемент {selector!r} с текстом {text!r}")
+        self.pump(0.35)
+        cond = (f"x.textContent.trim() === {json.dumps(text)}" if exact else f"x.textContent.includes({json.dumps(text)})")
+        js = (f"(() => {{ let els = [...document.querySelectorAll({json.dumps(selector)})]"
+              + (f".filter(x => {cond})" if text else "")
+              + f"; const el = els[{nth}]; if (!el || el.disabled) return false; el.click(); return true; }})()")
+        for _ in range(20):                       # кнопка могла перерисоваться или быть временно заблокирована
+            if self.eval(js):
+                break
+            self.pump(0.25)
+        else:
+            raise RuntimeError(f"не удалось нажать {selector!r} {text!r}")
         self.pump(wait)
 
     def type(self, selector: str, text: str, nth: int = 0, delay: float = 0.03) -> None:
@@ -220,30 +229,66 @@ def ffmpeg(*args: str) -> None:
         raise RuntimeError("ffmpeg: " + r.stderr[-1500:])
 
 
+def caption_frames(frames: list[tuple[float, Path]], captions: list[tuple[float, str]], out_dir: Path) -> list[tuple[float, Path]]:
+    """Подписи рисуются прямо на кадрах (Pillow): у сборки ffmpeg может не быть фильтра drawtext."""
+    from PIL import Image, ImageDraw, ImageFont
+    font = ImageFont.truetype(str(FONT_BOLD), 28)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    res = []
+    for k, (t, p) in enumerate(frames):
+        txt = None
+        for ct, ctext in captions:
+            if ct <= t + 0.05:
+                txt = ctext
+        img = Image.open(p).convert("RGB")
+        if img.size != (W, H):
+            img = img.resize((W, H))
+        if txt:
+            ov = Image.new("RGBA", img.size, (0, 0, 0, 0))
+            d = ImageDraw.Draw(ov)
+            lines, cur = [], ""
+            for word in txt.split():                     # перенос по ширине: правая часть кадра — для уведомлений
+                trial = (cur + " " + word).strip()
+                if d.textlength(trial, font=font) > MAX_CAPTION_W and cur:
+                    lines.append(cur); cur = word
+                else:
+                    cur = trial
+            lines.append(cur)
+            lh = 40
+            tw = max(d.textlength(l, font=font) for l in lines)
+            th = lh * len(lines)
+            bx, by = 44, H - th - 52
+            d.rounded_rectangle([bx - 20, by - 16, bx + tw + 22, by + th + 10], radius=14, fill=(28, 29, 34, 215))
+            d.rectangle([bx - 20, by - 16, bx - 14, by + th + 10], fill=(255, 0, 83, 255))
+            for li, l in enumerate(lines):
+                d.text((bx, by + li * lh), l, font=font, fill=(255, 255, 255, 255))
+            img = Image.alpha_composite(img.convert("RGBA"), ov).convert("RGB")
+        q = out_dir / f"c_{k:05d}.jpg"
+        img.save(q, quality=88)
+        res.append((t, q))
+    return res
+
+
 def assemble(rec: Recorder, work: Path, out: Path) -> None:
     frames = sorted(rec.frames, key=lambda x: x[0])
-    t0 = frames[0][0]
+    # на неподвижном экране поток кадров молчит, и новая подпись появилась бы только со следующим изменением картинки:
+    # в момент каждой подписи вставляем копию последнего кадра
+    original = list(frames)
+    for ct, _ in sorted(rec.captions):
+        prev = [f for f in original if f[0] <= ct]          # ищем только среди записанных кадров, не среди вставленных
+        if prev and abs(prev[-1][0] - ct) > 1e-3:
+            frames.append((ct, prev[-1][1]))
+    frames.sort(key=lambda x: x[0])
+    frames = caption_frames(frames, sorted(rec.captions), work / "captioned")
     lst = work / "frames.txt"
     with lst.open("w") as f:
         for i, (t, p) in enumerate(frames):
             nxt = frames[i + 1][0] if i + 1 < len(frames) else t + 1.5
             f.write(f"file '{p}'\nduration {max(nxt - t, 1 / 60):.4f}\n")
         f.write(f"file '{frames[-1][1]}'\n")
-    main_raw = work / "main_raw.mp4"
-    ffmpeg("-f", "concat", "-safe", "0", "-i", str(lst), "-vf", f"scale={W}:{H},format=yuv420p", "-r", "30", "-fps_mode", "cfr",
-           "-c:v", "libx264", "-preset", "medium", "-crf", "23", str(main_raw))
-    total = frames[-1][0] - t0 + 1.5
-    # подписи: каждая — до начала следующей
-    filters = []
-    caps = [(t - t0, txt) for t, txt in rec.captions]
-    for i, (start, txt) in enumerate(caps):
-        end = caps[i + 1][0] if i + 1 < len(caps) else total
-        tf = work / f"cap_{i:02d}.txt"
-        tf.write_text(txt, encoding="utf-8")
-        filters.append(f"drawtext=fontfile='{FONT_BOLD}':textfile='{tf}':fontsize=30:fontcolor=white:box=1:boxcolor=0x1C1D22@0.78:boxborderw=18:"
-                       f"x=(w-text_w)/2:y=h-text_h-44:enable='between(t,{max(start, 0):.2f},{end:.2f})'")
     main_cap = work / "main_cap.mp4"
-    ffmpeg("-i", str(main_raw), "-vf", ",".join(filters), "-c:v", "libx264", "-preset", "medium", "-crf", "23", "-pix_fmt", "yuv420p", str(main_cap))
+    ffmpeg("-f", "concat", "-safe", "0", "-i", str(lst), "-vf", f"scale={W}:{H},format=yuv420p", "-r", "30", "-fps_mode", "cfr",
+           "-c:v", "libx264", "-preset", "medium", "-crf", "23", str(main_cap))
     # заставка и финал
     title_png, end_png = work / "title.png", work / "end.png"
     card_image(title_png, "Карьера ФСП — найм наоборот", "Работодатель находит кандидата с грейдом, подтверждённым тестом",
@@ -261,6 +306,16 @@ def assemble(rec: Recorder, work: Path, out: Path) -> None:
     ffmpeg("-f", "concat", "-safe", "0", "-i", str(concat), "-c", "copy", "-movflags", "+faststart", str(out))
 
 
+def rebuild_from_saved(work: Path, out: Path) -> None:
+    """Пересобрать видео из сохранённых кадров и подписей (без повторной записи)."""
+    meta = json.loads((work / "timeline.json").read_text(encoding="utf-8"))
+
+    class R:  # noqa: D401 — простая обёртка под assemble
+        frames = [(t, Path(p)) for t, p in meta["frames"]]
+        captions = [tuple(c) for c in meta["captions"]]
+    assemble(R, work, out)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--base", default="http://localhost:8013")
@@ -268,9 +323,15 @@ def main() -> int:
     ap.add_argument("--out", default=str(ROOT / "docs" / "build" / "Карьера_ФСП_демо.mp4"))
     ap.add_argument("--work", default=str(ROOT / "docs" / "build" / "demo"))
     ap.add_argument("--devtools-port", type=int, default=9344)
+    ap.add_argument("--assemble-only", action="store_true", help="только собрать видео из сохранённых кадров")
     args = ap.parse_args()
     base = args.base.rstrip("/")
     work = Path(args.work)
+    if args.assemble_only:
+        rebuild_from_saved(work, Path(args.out))
+        shutil.copyfile(args.out, ROOT / "frontend" / "files" / Path(args.out).name)
+        print("видео:", args.out, f"{Path(args.out).stat().st_size / 1e6:.1f} МБ")
+        return 0
     shutil.rmtree(work, ignore_errors=True)
     (work / "frames").mkdir(parents=True)
     with ss.urllib.request.urlopen(base + "/api/health", timeout=5) as r:
@@ -296,8 +357,8 @@ def main() -> int:
         rec.type(".money-range input", "280000", nth=1, delay=0.05)
         rec.click("form button.btn-primary", "Сохранить потребность", wait=0.5)
         rec.wait_for("Потребность сохранена")
-        rec.settle(6, 0.3)
         rec.caption("Поля распознаны из текста: специализация, грейд, стек, зарплата")
+        rec.settle(6, 0.3)
         rec.scroll(260)
         rec.pump(3.0)
         rec.click("button", "Собрать подборку", wait=0.8)
@@ -311,17 +372,19 @@ def main() -> int:
         rec.scroll(-330)
         rec.click("button", "Уточнить фильтры", wait=0.8)
         rec.caption("Уточнение фильтров создаёт новую версию, прежняя сохраняется")
-        if rec.locate("button.chip-toggle.on", "Junior"):
-            rec.click("button.chip-toggle", "Junior", wait=0.6)
+        rec.pump(1.0)
+        rec.click("button.chip-toggle", "Middle", wait=0.8)        # оставить только грейд Middle
         rec.click("button", "Собрать новую версию", wait=0.8)
         rec.wait_for("Версия 2")
         rec.settle(8, 0.5)
-        rec.pump(2.5)
+        rec.eval("window.scrollTo({top: 0}); 1")
+        rec.caption("Версия 2: только Middle; версия 1 осталась доступна")
+        rec.pump(3.5)
         rec.click("button", "Пригласить", wait=0.8)
         rec.caption("Работодатель сам приглашает кандидата и сразу называет зарплату «от–до»")
         rec.type(".modal textarea", INVITE_TEXT, delay=0.015)
-        rec.eval("(() => { const xs = document.querySelectorAll('.modal .money-range input'); "
-                 "[['200000', 0], ['280000', 1]].forEach(([v, i]) => { xs[i].value = v; xs[i].dispatchEvent(new Event('input', {bubbles: true})); }); return 1; })()")
+        rec.type(".modal .money-range input", "200000", nth=0, delay=0.05)
+        rec.type(".modal .money-range input", "280000", nth=1, delay=0.05)
         rec.pump(1.2)
         rec.click(".modal button.btn-primary", None, wait=1.0)
         rec.pump(2.0)
@@ -416,6 +479,10 @@ def main() -> int:
         rec.caption("Кандидат видит компанию, предложение и вилку — и решает сам")
         rec.pump(3.5)
         rec.click("button.btn-primary", "Принять и открыть контакты", wait=1.2)
+        rec.caption("Перед согласием приложение спрашивает подтверждение: контакты получит только эта компания")
+        rec.pump(2.5)
+        rec.click(".modal-foot button.btn-primary", "Принять", wait=1.2, exact=True)
+        rec.wait_for("Вы приняли приглашение", timeout=10)
         rec.caption("Согласие кандидата открывает контакты — только этому работодателю")
         rec.pump(2.5)
         rec.pause()
@@ -432,6 +499,7 @@ def main() -> int:
     print(f"кадров: {len(rec.frames)}, подписей: {len(rec.captions)}")
     if issues:
         print("замечания консоли:", *issues[:10], sep="\n  ")
+    (work / "timeline.json").write_text(json.dumps({"frames": [(t, str(p)) for t, p in rec.frames], "captions": rec.captions}, ensure_ascii=False), encoding="utf-8")
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     assemble(rec, work, out)

@@ -25,7 +25,7 @@ from .skills_catalog import skill_name
 from . import matching_formula as formula
 from .matching_formula import LEVEL_SCORE, SPEC_DISCIPLINE  # noqa: F401  (нужны features.py и проверкам)
 
-CALIBRATION = {"a": 7.1956, "b": -2.4124}     # p = σ(a·raw + b); calibrate.py на реалистичных мирах 11,12,13,16,17, проверено на 14,15,18 (docs/09)
+CALIBRATION = {"a": 7.0520, "b": -2.3569}     # p = σ(a·raw + b); calibrate.py на реалистичных мирах 11,12,13,16,17, проверено на 14,15,18 (docs/09)
 TRUSTED = ("source", "document")
 
 
