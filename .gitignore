@@ -35,3 +35,6 @@ build/
 # служебные файлы генератора шаблонов (отклонённые черновики и журнал попыток)
 backend/app/services/testing/bank/generated/_rejected/
 backend/app/services/testing/bank/generated/_run_log.jsonl
+
+# сборка документации (HTML, временные файлы); PDF и так вне git
+docs/build/
