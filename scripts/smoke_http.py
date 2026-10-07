@@ -113,11 +113,15 @@ def main():
         url = ls["redirect_url"]
         state = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)["state"][0]
         redirect_uri = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)["redirect_uri"][0]
-        st, page, _ = call(b, "GET", url[url.index("/api/"):] if "/api/" in url else url)
+        page_path = url[url.index("/api/"):] if "/api/" in url else url
+        st, page, _ = call(b, "GET", page_path)
         ids = re.findall(r"FSP-\d+", page if isinstance(page, str) else "")
+        m_action = re.search(r'<form method="post" action="([^"]+)"', page if isinstance(page, str) else "")
+        action_path = urllib.parse.urlparse(urllib.parse.urljoin(b.rstrip("/") + page_path, m_action.group(1))).path if m_action else ""
+        check("ФСП ID: форма входа отправляется на верный адрес (как в браузере)", action_path.endswith("/api/v1/fsp/mock/authorize"), action_path)
         linked = False
         for fid in ids[:15]:
-            st, _, hdr = call(b, "POST", f"{api}/fsp/mock/authorize", form={"state": state, "redirect_uri": redirect_uri, "fsp_id": fid}, follow=False)
+            st, _, hdr = call(b, "POST", action_path or f"{api}/fsp/mock/authorize", form={"state": state, "redirect_uri": redirect_uri, "fsp_id": fid}, follow=False)
             loc = hdr.get("location") or hdr.get("Location") or ""
             if st == 303 and loc:
                 st2, _, hdr2 = call(b, "GET", loc[loc.index("/api/"):] if "/api/" in loc else loc, follow=False)

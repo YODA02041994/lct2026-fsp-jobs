@@ -72,7 +72,7 @@ button{{background:#FF0053;color:#fff;border:0;border-radius:10px;padding:12px 2
 input[type=text]{{padding:10px;border:1px solid #ccc;border-radius:8px;width:60%}}</style></head><body><div class="card">
 <h1>Единый вход ФСП ID</h1><div class="note">Это встроенный издатель-заглушка: он повторяет протокол OpenID Connect, которым будет пользоваться Keycloak ФСП.
 Выберите тестового участника реестра или введите идентификатор.</div>
-<form method="post" action="mock/authorize"><input type="hidden" name="state" value="{state}"><input type="hidden" name="redirect_uri" value="{redirect_uri}">
+<form method="post" action="authorize"><input type="hidden" name="state" value="{state}"><input type="hidden" name="redirect_uri" value="{redirect_uri}">
 {rows}<div style="margin-top:12px"><input type="text" name="custom_id" placeholder="или свой FSP-ID, например FSP-100007"></div>
 <button type="submit">Войти и разрешить доступ к достижениям</button></form></div></body></html>"""
 

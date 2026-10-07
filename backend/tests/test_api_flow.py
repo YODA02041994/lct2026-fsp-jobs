@@ -157,3 +157,17 @@ def test_fsp_mock_link_imports_achievements(client):
     assert me["fsp_id"] == p.fsp_id
     r = client.post("/api/v1/fsp/unlink", headers=h)
     assert r.json()["fsp_id"] is None
+
+
+def test_fsp_mock_form_action_resolves_like_browser(client):
+    """Форма входа заглушки ФСП ID должна отправляться на существующий адрес, если разрешать её action как браузер.
+    Раньше action="mock/authorize" от страницы /api/v1/fsp/mock/login давал /api/v1/fsp/mock/mock/authorize — 405 в интерфейсе."""
+    import re
+    from urllib.parse import urljoin, urlparse
+    h = register_and_confirm(client, "fsp-form@example.com", "candidate")
+    url = client.get("/api/v1/fsp/link/start", headers=h).json()["redirect_url"]
+    page_path = url[url.index("/api/"):]
+    page = client.get(page_path)
+    action = re.search(r'<form method="post" action="([^"]+)"', page.text).group(1)
+    target = urlparse(urljoin("http://testserver" + page_path, action)).path
+    assert target == "/api/v1/fsp/mock/authorize", target
