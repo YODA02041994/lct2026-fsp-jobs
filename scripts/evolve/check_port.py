@@ -32,7 +32,7 @@ def to_obj(f: dict):
 
 
 def main():
-    ref_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "best_2026-10-07.py")
+    ref_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "best_2026-10-07b.py")   # установленный эталон
     ref = load_score(ref_path)
     worlds = load_worlds(os.path.join(ROOT, "data", "evolve"), seeds=[14])
     now = datetime.now(timezone.utc)

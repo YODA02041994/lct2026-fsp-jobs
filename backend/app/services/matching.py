@@ -89,6 +89,13 @@ def fsp_text(c: Candidate) -> str | None:
     return f"{best.title}" + (" (подтверждено источником)" if best.trust_level == "source" else " (подтверждено документом)")
 
 
+def _raw_max_without_need(grade: str | None, w: dict) -> float:
+    """Сырой итог идеального кандидата при просмотре банка без потребности — чтобы показывать долю от достижимого."""
+    perfect = {"spec": None, "grade": grade, "claimed_grade": grade, "skills": {}, "theta": 2.5, "theta_days": 0,
+               "fsp": [{"level": "A5", "discipline": None}], "active_days": 0, "salary_min": None, "salary_max": None, "work_format": None}
+    return max(formula.score(perfect, {"grade": grade, "stack": []}, w)[0], 1e-9)
+
+
 def calibrated(raw: float) -> float:
     """Сырой итог → вероятность «подходит» (монотонно, порядок не меняется)."""
     return 1.0 / (1.0 + math.exp(-(CALIBRATION["a"] * raw + CALIBRATION["b"])))
@@ -100,14 +107,16 @@ def score_candidate(c: Candidate, need: dict, weights: dict, last_theta: tuple |
     w = {**DEFAULT_WEIGHTS, **(weights or {})}
     feat = candidate_features(c, last_theta)
     nf = need_features(need)
+    has_need = bool(nf["grade"] or nf["stack"])
+    if not nf["grade"]:
+        nf["grade"] = c.grade        # без грейда в потребности каждого оцениваем относительно его собственного подтверждённого грейда
     raw_score, raw_parts = formula.score(feat, nf, w)
     hint = False
     if c.claimed_grade and c.claimed_grade != c.grade:
         _, parts_no = formula.score({**feat, "claimed_grade": None}, nf, w)
         hint = raw_parts["grade"] > parts_no["grade"] + 1e-9
     inflated = bool(c.claimed_grade in GRADES and c.grade in GRADES and GRADES.index(c.claimed_grade) > GRADES.index(c.grade) + 1)
-    has_need = bool(nf["grade"] or nf["stack"])
-    score = calibrated(raw_score) if has_need else min(raw_score, 1.0)
+    score = calibrated(raw_score) if has_need else min(raw_score / _raw_max_without_need(c.grade, w), 1.0)
     detail = stack_detail(nf["stack"], c.skills)
     theta, fin = last_theta if last_theta else (None, None)
     # обоснование одной строкой

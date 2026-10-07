@@ -169,7 +169,7 @@ def search(specialization_code: str | None = None, grade: str | None = None, ski
         pool = [c for c in pool if ql in (c.about or "").lower() or any(ql in k.skill for k in c.skills) or any(ql in r.lower() for r in c.roles)]
     thetas = last_thetas(db, [c.id for c in pool])
     need = {"stack": f.get("skills") or [], "grade": None}
-    scored = sorted(((c, score_candidate(c, need, {}, thetas.get(c.id))) for c in pool), key=lambda x: (-x[1]["score"], x[0].id))
+    scored = sorted(((c, score_candidate(c, need, {}, thetas.get(c.id))) for c in pool), key=lambda x: (-x[1]["raw_score"], x[0].id))
     return [candidate_card(c, sc, contacts_unlocked(db, e.id, c.id), db) for c, sc in scored[:limit]]
 
 
