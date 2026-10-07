@@ -303,7 +303,7 @@ def main():
             ser._element.remove(dl)
     ch.has_legend = True; ch.legend.position = XL_LEGEND_POSITION.BOTTOM; ch.legend.include_in_layout = False
     ch.legend.font.size = Pt(12); ch.legend.font.color.rgb = RGBColor.from_string(DARK)
-    for a, b, big, small in ((21, 18, "0,98", "грейд в пределах соседнего (10 заданий, 600 синтетических кандидатов восьми специализаций)"),
+    for a, b, big, small in ((21, 18, "0,98", "грейд в пределах соседнего (10 заданий; 2 зерна × 300 синтетических кандидатов восьми специализаций)"),
                              (22, 23, "0,58 / 0,62", "точный грейд при 10 / 15 заданиях; тест ограничен объёмом информации, а не настройкой"),
                              (24, 25, "0,79–0,82", "AUC между соседними грейдами junior/middle и middle/senior"),
                              (26, 27, "0,50 → 0,59", "согласованность повтора при 10 → 15 заданиях; путь улучшения — длиннее тест и больше шаблонов")):
