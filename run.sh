@@ -12,7 +12,10 @@ case "${1:-dev}" in
     .venv/bin/pip install -q -r backend/requirements.txt
     cd backend && ../.venv/bin/python -m app.seed && FSP_PUBLIC_URL="${FSP_PUBLIC_URL:-http://localhost:${PORT:-8000}}" ../.venv/bin/uvicorn app.main:app --reload --port "${PORT:-8000}" ;;
   seed) cd backend && ../.venv/bin/python -m app.seed "${@:2}" ;;
-  test) cd backend && ../.venv/bin/python -m pytest -q ;;
+  test)
+    [ -d .venv ] || python3 -m venv .venv
+    .venv/bin/pip install -q -r backend/requirements-dev.txt
+    cd backend && ../.venv/bin/python -m pytest -q ;;
   smoke) python3 scripts/smoke_http.py --base "${BASE:-http://localhost:${PORT:-8080}}" ;;
   docker) docker compose up --build ;;
   *) sed -n '2,6p' "$0" ;;
