@@ -40,7 +40,7 @@
 ## Работодатель (`role=employer`)
 - `GET /employers/me`, `PUT /employers/me` `{company_name,description,industry,website,city,contact_person,contact_email,contact_phone}`
 - Потребность и подборка:
-  - `POST /needs` `{title,text,specialization_code?,grade?,stack?[],salary_min?,salary_max?,work_format?,city?}` → `{need, extracted:{specialization_code,grade,stack[]}}` (из текста извлекаются технологии; явные поля главнее)
+  - `POST /needs` `{title,text,specialization_code?,grade?,stack?[],salary_min?,salary_max?,work_format?,city?}` → `{need, extracted:{specialization_code,grade,stack[],salary_min,salary_max,source}}` (из текста извлекаются технологии, грейд, специализация и зарплата; `source` = `rules` или `rules+model` — правила, затем внешняя модель по обезличенному тексту; явные поля главнее)
   - `GET /needs` → список
   - `POST /needs/{id}/selection` `{weights?}` → `Selection`
   - `POST /selections/{id}/refine` `{filters:{specialization_code?,grades?[],skills?[],fsp_only?:bool,city?,salary_max?}, weights?}` → `Selection` (новая версия; прежние сохраняются)
@@ -57,3 +57,8 @@
 ## Правила видимости
 - Контакты кандидата (`full_name, phone, telegram, email`) отдаются работодателю только при `contacts_unlocked` — после `accepted` приглашения этого работодателя или отклика кандидата на его вакансию. Открытие контактов пишется в журнал.
 - До этого кандидат виден как `alias` («Кандидат № N») с категорией, навыками, достижениями (с учётом настроек приватности).
+
+## Служебные адреса
+
+- `GET /api/health` → `{status, templates, demo_mode, model}` — `templates` — число шаблонов в банке, `demo_mode` — нет SMTP (ссылка подтверждения показывается на экране), `model` — настроена ли внешняя модель для разбора текста.
+- `GET /api/docs`, `GET /api/openapi.json` — интерактивная документация и схема.

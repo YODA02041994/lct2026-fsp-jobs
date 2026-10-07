@@ -287,7 +287,9 @@ RULES = '''ТРЕБОВАНИЯ К ФАЙЛУ ШАБЛОНА
    bash-команд, манифестов, схем и нотаций — language="text".
 {fmt_rules}
 7. Пояснение explanation объясняет, почему ответ именно такой (1–2 предложения).
-8. Никакой прозы вне кода. Ответ — ОДИН блок ```python с полным содержимым файла.'''
+8. Файл компактный — не длиннее ~150 строк: варианты и утверждения по одной строке, без длинных комментариев;
+   иначе ответ оборвётся по лимиту токенов и будет отклонён.
+9. Никакой прозы вне кода. Ответ — ОДИН блок ```python с полным содержимым файла.'''
 
 FMT_RULES = {
     "exact_python": '''ФОРМАТ exact (код на Python):
@@ -518,8 +520,10 @@ def todo_cells(generated: list[dict]) -> list[dict]:
 # ---------------------------------------------------------------------------------------------
 
 class State:
-    def __init__(self, base_codes: list[str], generated: list[dict], limit_usd: float):
+    def __init__(self, base_codes: list[str], generated: list[dict], limit_usd: float, max_tokens: int = 2500,
+                 retry_max_tokens: int = 3500):
         self.lock = threading.Lock()
+        self.max_tokens, self.retry_max_tokens = max_tokens, retry_max_tokens
         self.occupied: set[str] = set(base_codes) | {t["code"] for t in generated}
         self.titles: dict[str, list[str]] = {}
         for t in generated:
@@ -559,7 +563,7 @@ def process_cell(cell: dict, st: State, registry: dict, verbose: bool) -> dict:
         msgs = build_prompt(cell, registry, titles, error_text, prev_code)
         t0 = time.time()
         try:
-            raw = llm_client.chat(msgs, max_tokens=2500, temperature=0.7)
+            raw = llm_client.chat(msgs, max_tokens=st.max_tokens if attempt == 1 else st.retry_max_tokens, temperature=0.7)
         except Exception as e:  # noqa: BLE001
             result["errors"] = [f"модель: {e}"]
             result["attempts"] = attempt
@@ -570,7 +574,11 @@ def process_cell(cell: dict, st: State, registry: dict, verbose: bool) -> dict:
             src = src[3:]
         src = src.strip("\n") + "\n"
         n = st.next_id()
-        errors = static_errors(src, cell)
+        if raw.count("```") % 2 == 1:          # блок кода не закрыт — ответ оборван по лимиту токенов
+            errors = ["обрезка: ответ оборван по лимиту токенов (блок кода не закрыт) — сократите файл до ~150 строк: "
+                      "варианты по одной строке, пояснения в одно предложение, меньше сценариев"]
+        else:
+            errors = static_errors(src, cell)
         res: dict = {"ok": False, "errors": errors, "code": None, "info": {}}
         if not errors:
             cand = f"_cand_{n}"
@@ -631,6 +639,8 @@ def main() -> None:
     ap.add_argument("--limit-usd", type=float, default=2.0, help="лимит расхода в долларах")
     ap.add_argument("--max-cells", type=int, default=0, help="взять только первые N пробелов (для пробного запуска)")
     ap.add_argument("--only-spec", default="", help="только эта специализация")
+    ap.add_argument("--max-tokens", type=int, default=2500, help="лимит токенов ответа на первой попытке")
+    ap.add_argument("--retry-max-tokens", type=int, default=3500, help="лимит токенов ответа на повторной попытке (после обрезки)")
     ap.add_argument("--dry-run", action="store_true", help="показать пробелы и один промпт, модель не вызывать")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
@@ -651,7 +661,7 @@ def main() -> None:
     if not todo:
         print("Пробелов по плану нет — делать нечего.")
         return
-    st = State(listing["base_codes"], generated, args.limit_usd)
+    st = State(listing["base_codes"], generated, args.limit_usd, args.max_tokens, args.retry_max_tokens)
     if args.dry_run:
         c = dict(todo[0]); c["occupied"] = sorted(st.occupied)
         msgs = build_prompt(c, registry, st.titles.get(c["spec"], []))

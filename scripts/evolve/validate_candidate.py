@@ -32,6 +32,7 @@ sys.path.insert(0, os.getcwd())
 SEEDS = list(range(1, 31))
 LANGUAGES = {"python", "javascript", "sql", "text", "html", "css"}
 CYRILLIC = re.compile(r"[а-яА-ЯёЁ]")
+PLACEHOLDER = re.compile(r"\{[A-Za-z_][A-Za-z0-9_]*\}")      # «{name}» в тексте — забытая f-строка
 PKG = "app.services.testing.bank.generated"
 
 
@@ -122,6 +123,11 @@ def _check_instance(fmt: str, inst, Instance, check_answer) -> list[str]:
     if not errs:
         if not check_answer(fmt, inst.answer, inst.answer):
             errs.append("check_answer не принимает собственный ключ")
+    for label, text in (("вопрос", inst.question), ("пояснение", inst.explanation), *(("вариант", o) for o in (inst.options or []))):
+        m = PLACEHOLDER.search(text or "")
+        if m:
+            errs.append(f"{label} содержит незаполненную подстановку {m.group(0)} — забыта f-строка")
+            break
     return errs
 
 
@@ -243,7 +249,9 @@ def check(mod_name: str, expect: dict) -> dict:
                     break
                 if out is None:
                     break
-                if normalize_exact(out) != normalize_exact(inst.answer):
+                # сравниваем последовательность значений: node печатает по строке на событие, ключ склеен запятыми
+                tokens = lambda t: [x for x in re.split(r"[\s,]+", normalize_exact(t)) if x]  # noqa: E731
+                if tokens(out) != tokens(inst.answer):
                     errors.append(f"exact: зерно {seed}: вывод node {out!r}, а ключ {inst.answer!r} — ответ вычислен неверно")
                     break
                 checked += 1
