@@ -117,11 +117,14 @@ def main():
         st, page, _ = call(b, "GET", page_path)
         ids = re.findall(r"FSP-\d+", page if isinstance(page, str) else "")
         m_action = re.search(r'<form method="post" action="([^"]+)"', page if isinstance(page, str) else "")
-        action_path = urllib.parse.urlparse(urllib.parse.urljoin(b.rstrip("/") + page_path, m_action.group(1))).path if m_action else ""
+        # адрес формы собираем как браузер — полный. На стенде с префиксом /fsp путь уже содержит префикс,
+        # поэтому к base его не приклеиваем (иначе выйдет /fsp/fsp/api/... и nginx отдаст index.html), а шлём как есть
+        action_url = urllib.parse.urljoin(b.rstrip("/") + page_path, m_action.group(1)) if m_action else ""
+        action_path = urllib.parse.urlparse(action_url).path
         check("ФСП ID: форма входа отправляется на верный адрес (как в браузере)", action_path.endswith("/api/v1/fsp/mock/authorize"), action_path)
         linked = False
         for fid in ids[:15]:
-            st, _, hdr = call(b, "POST", action_path or f"{api}/fsp/mock/authorize", form={"state": state, "redirect_uri": redirect_uri, "fsp_id": fid}, follow=False)
+            st, _, hdr = call(b, "POST", action_url or f"{api}/fsp/mock/authorize", form={"state": state, "redirect_uri": redirect_uri, "fsp_id": fid}, follow=False)
             loc = hdr.get("location") or hdr.get("Location") or ""
             if st == 303 and loc:
                 st2, _, hdr2 = call(b, "GET", loc[loc.index("/api/"):] if "/api/" in loc else loc, follow=False)
